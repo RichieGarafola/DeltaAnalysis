@@ -1,0 +1,244 @@
+# Delta Analysis Tool
+
+[![Tests](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml/badge.svg)](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml)
+
+A production-quality Python + Streamlit application for comparing two datasets side-by-side. Built for government analysts performing reconciliation, receipt tracking, case audits, DFAS-style package reviews, and duplicate submission checks.
+
+---
+
+## Why this tool exists
+
+Government data workflows constantly produce two versions of the same dataset — last week's extract vs this week's, contractor-submitted vs agency-received, a source system export vs a downstream database snapshot. Identifying *what changed*, *what's missing*, and *what's new* is a recurring, error-prone manual process. This tool automates it with a reproducible, auditable, briefing-ready output.
+
+---
+
+## What it does
+
+Upload **File A** (baseline) and **File B** (comparison), configure the columns that uniquely identify each record, and click Run.
+
+| Category | Description |
+|---|---|
+| **Only in File A** | Records present in A but not B — potential deletions or missing submissions |
+| **Only in File B** | Records present in B but not A — new arrivals or unmatched entries |
+| **Matched Records** | All records with a common key, shown side-by-side |
+| **Changed Records** | Matched records where a compared field has a different value |
+| **Duplicate Keys** | Rows that share a key within the same file — data quality flag |
+| **Blank / Null Keys** | Rows excluded because the key field is empty — flagged for correction |
+
+Results are shown in an interactive dashboard with:
+- **8 metric cards** for at-a-glance counts
+- **3 Plotly charts**: delta category bar chart, match coverage donut, field-change frequency
+- **8 tabbed result tables** with per-category CSV downloads
+- **10-tab Excel workbook** with an auto-generated Executive Narrative
+
+---
+
+## Installation
+
+### 1 — Clone the repo
+
+```bash
+git clone https://github.com/RichieGarafola/DeltaAnalysis.git
+cd DeltaAnalysis
+```
+
+### 2 — Create a virtual environment
+
+```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+### 3 — Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+**Dependencies:** `streamlit`, `pandas`, `openpyxl`, `xlrd`, `plotly`, `pytest`, `pytest-cov`
+
+---
+
+## Running the application
+
+```bash
+streamlit run app.py
+```
+
+Opens at `http://localhost:8501`. No configuration required.
+
+---
+
+## Running the tests
+
+```bash
+pytest tests/ -v
+```
+
+Expected output: **47 tests passing** across two test modules.
+
+With coverage:
+
+```bash
+pytest tests/ --cov=src --cov-report=term-missing
+```
+
+---
+
+## Generating reports
+
+1. Launch the app (`streamlit run app.py`)
+2. Upload File A and File B (CSV or Excel)
+3. Select key column(s) from each file
+4. Select comparison column(s) to diff
+5. Click **Run Delta Analysis**
+6. Use the **Download Excel Report** button for the full 10-tab workbook
+7. Use the per-tab **Download CSV** buttons for individual category exports
+
+The Excel workbook tabs:
+- **Summary** — all counts and percentages
+- **Executive Narrative** — auto-generated plain-English briefing text
+- **Delta Counts** — flat table suitable for pivot tables
+- **Only in File A / B** — unmatched records
+- **Matched Records** — side-by-side A + B view
+- **Changed Records** — before/after values per changed field
+- **Duplicate Keys File A / B** — non-unique key rows
+- **Data Quality Issues** — blank/null key rows
+
+---
+
+## Using the sample data
+
+```
+sample_data/sample_a.csv   — 11-row baseline (includes 1 duplicate, 1 blank key)
+sample_data/sample_b.csv   — 10-row comparison (changed fields, new entries)
+```
+
+Recommended settings for the sample:
+- Key column: `CaseID` (both files)
+- Comparison columns: `ContractAmount`, `Status`, `ReviewedBy` (both files)
+
+Expected results:
+
+| Category | Count |
+|---|---|
+| Only in File A | 2 (C007, C008 — C008 is also a duplicate) |
+| Only in File B | 3 (C010, C011, C012) |
+| Matched | 7 |
+| Changed | 4 (C002, C004, C005, C009) |
+| Duplicate Keys A | 2 (both C008 rows) |
+| Blank Keys A | 1 |
+
+---
+
+## Project structure
+
+```
+DeltaAnalysis/
+├── app.py                      # Streamlit UI — main entry point
+├── requirements.txt
+├── README.md
+├── .gitignore
+├── .github/
+│   └── workflows/
+│       └── tests.yml           # CI: runs pytest on push and pull_request
+├── src/
+│   ├── __init__.py
+│   ├── normalization.py        # Key cleaning: trim, fix "1234.0", handle nulls
+│   ├── io_utils.py             # File upload parsing with user-friendly errors
+│   ├── delta_engine.py         # Core comparison → DeltaResult dataclass
+│   └── reporting.py            # 10-tab Excel export with Executive Narrative
+├── tests/
+│   ├── __init__.py
+│   ├── test_normalization.py   # 21 unit tests
+│   └── test_delta_engine.py    # 26 unit tests
+└── sample_data/
+    ├── sample_a.csv
+    └── sample_b.csv
+```
+
+---
+
+## CI/CD
+
+A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test suite automatically on every push and pull request. The build fails if any test fails.
+
+---
+
+## Key design decisions
+
+**All data read as strings.** Prevents silent type coercion — a common cause of false mismatches when Excel stores IDs as numbers (e.g., `1001` read as `1001.0`).
+
+**Composite key support.** Multiple columns combine into one match key (e.g., Fiscal Year + Case ID), joined with `||` to prevent collisions between single-column values.
+
+**Blank keys are quarantined, not silently dropped.** Rows with null keys are reported separately so analysts see what was excluded and why — important for audit trails.
+
+**Duplicates use first-occurrence for matching.** All duplicate rows are surfaced in the Duplicates tab; matching uses only the first occurrence so totals remain predictable.
+
+**Executive Narrative is fully data-driven.** Every number in the narrative text is derived from the actual DeltaResult — no manual editing required before briefing leadership.
+
+---
+
+## Supported file formats
+
+| Format | Extension |
+|---|---|
+| CSV | `.csv` |
+| Excel (modern) | `.xlsx` |
+| Excel (legacy) | `.xls` |
+
+---
+
+## Current limitations
+
+- **Single-sheet Excel only.** Multi-sheet Excel workbooks are read from Sheet 1 only.
+- **String comparison only.** All values are compared as normalized strings; numeric tolerance (e.g., rounding) is not supported.
+- **No date-aware diffing.** Date fields that differ only in format (e.g., `01/15/2024` vs `2024-01-15`) will be flagged as changes.
+- **Memory-bound.** Very large files (500k+ rows) may be slow or exhaust browser memory. For large datasets, pre-filter or chunk before uploading.
+- **No authentication.** The Streamlit app has no login wall. Do not deploy to a public URL with sensitive government data unless appropriate controls are in place.
+
+---
+
+## Roadmap
+
+### Near-term
+- [ ] Multi-sheet Excel support (let user select which sheet to load)
+- [ ] Date normalization options (parse and compare as dates, not strings)
+- [ ] Numeric tolerance option for amount fields
+- [ ] Saved configuration profiles (persist key/comparison column selections)
+- [ ] Column rename mapping UI (map `Case_ID` in A to `CaseNumber` in B without manual selection)
+
+### Medium-term
+- [ ] PDF report export (leadership briefing format)
+- [ ] Scheduled / automated comparison runs via CLI
+- [ ] Row-level audit log with user annotations
+
+### Out of scope (for now)
+- SharePoint, ADVANA, Azure SQL, or Power BI integrations (Phase 4 — deferred)
+
+---
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Duplicate column names detected` | Two columns share the same name | Rename the duplicate in the source file |
+| `Columns not found in File A key columns` | Selected column no longer matches after re-upload | Re-select after uploading |
+| `Key column counts must match` | Different number of keys selected for A vs B | Select the same count in each file |
+| `Could not parse Excel file` | File may be password-protected or corrupted | Save as new `.xlsx` from Excel and re-upload |
+| `The uploaded file contains no data rows` | File has headers only | Confirm the file has data rows below the header |
+
+---
+
+## Use cases
+
+- **DFAS receipt reconciliation** — match invoices by contract number; flag amount or status changes
+- **M&RA package tracking** — compare weekly extracts; surface new submissions and status deltas
+- **Duplicate submission review** — identify cases where the same ID appears multiple times
+- **Operational reporting** — produce a briefing-ready delta between two reporting periods
+- **Audit support** — every result category is traceable to its source rows; Excel export is sharable and self-contained

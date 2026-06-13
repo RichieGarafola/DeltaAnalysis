@@ -1,0 +1,11 @@
+CaseID,ContractorName,ContractAmount,Status,SubmittedDate,ReviewedBy,ProgramOffice
+C001,ACME Corporation,15000.00,Approved,2024-01-15,J. Smith,G6
+C002,Delta Logistics Inc,27500.00,Approved,2024-01-18,M. Jones,G4
+C003,Bravo Support LLC,8900.00,Approved,2024-01-20,J. Smith,G6
+C004,Charlie Systems Co,52000.00,Approved,2024-01-22,T. Brown,G8
+C005,Echo Services Corp,12000.00,Cancelled,2024-01-25,R. Davis,G4
+C006,Foxtrot Consulting Inc,33000.00,Approved,2024-01-28,J. Smith,G6
+C009,India Infrastructure Inc,88000.00,Approved,2024-02-08,J. Smith,G6
+C010,Juliet Defense Corp,5500.00,Approved,2024-02-10,T. Brown,G8
+C011,Kilo Maintenance LLC,14200.00,Pending,2024-02-12,M. Jones,G4
+C012,Lima Contracting Inc,22800.00,Approved,2024-02-14,R. Davis,G6
