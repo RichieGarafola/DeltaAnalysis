@@ -28,7 +28,7 @@ Upload **File A** (baseline) and **File B** (comparison), configure the columns 
 | **Blank / Null Keys** | Rows excluded because the key field is empty — flagged for correction |
 
 Results are shown in an interactive dashboard with:
-- **8 metric cards** for at-a-glance counts
+- **10 KPI cards** for at-a-glance counts (totals, matched, changed, duplicates, blanks)
 - **3 Plotly charts**: delta category bar chart, match coverage donut, field-change frequency
 - **8 tabbed result tables** with per-category CSV downloads
 - **10-tab Excel workbook** with an auto-generated Executive Narrative
@@ -116,25 +116,43 @@ The Excel workbook tabs:
 
 ## Using the sample data
 
+Two sets of sample data are included:
+
+### Minimal demo (`file_a.csv` / `file_b.csv`)
+
+Designed to exercise every delta category in a single small dataset.
+
 ```
-sample_data/sample_a.csv   — 11-row baseline (includes 1 duplicate, 1 blank key)
-sample_data/sample_b.csv   — 10-row comparison (changed fields, new entries)
+sample_data/file_a.csv  — 6 rows: 1 matched-unchanged, 1 matched-changed,
+                           1 only-in-A, 1 duplicate key (x2), 1 blank key
+sample_data/file_b.csv  — 4 rows: corresponding comparison data
 ```
 
-Recommended settings for the sample:
-- Key column: `CaseID` (both files)
-- Comparison columns: `ContractAmount`, `Status`, `ReviewedBy` (both files)
+Recommended settings:
+- Key column: `RecordID` (both files)
+- Comparison columns: `Status`, `Amount` (both files)
 
 Expected results:
 
 | Category | Count |
 |---|---|
-| Only in File A | 2 (C007, C008 — C008 is also a duplicate) |
-| Only in File B | 3 (C010, C011, C012) |
-| Matched | 7 |
-| Changed | 4 (C002, C004, C005, C009) |
-| Duplicate Keys A | 2 (both C008 rows) |
+| Only in File A | 1 (R003) |
+| Only in File B | 1 (R005) |
+| Matched | 3 (R001 unchanged, R002 changed, R004 from first occurrence) |
+| Changed | 1 (R002: Status Pending→Approved, Amount 8500→9000) |
+| Duplicate Keys A | 2 (both R004 rows flagged) |
 | Blank Keys A | 1 |
+
+### Full contracting dataset (`sample_a.csv` / `sample_b.csv`)
+
+```
+sample_data/sample_a.csv  — 11-row baseline (includes 1 duplicate, 1 blank key)
+sample_data/sample_b.csv  — 10-row comparison (changed fields, new entries)
+```
+
+Recommended settings:
+- Key column: `CaseID` (both files)
+- Comparison columns: `ContractAmount`, `Status`, `ReviewedBy` (both files)
 
 ---
 
@@ -160,8 +178,10 @@ DeltaAnalysis/
 │   ├── test_normalization.py   # 21 unit tests
 │   └── test_delta_engine.py    # 26 unit tests
 └── sample_data/
-    ├── sample_a.csv
-    └── sample_b.csv
+    ├── file_a.csv              # Minimal demo — one of each delta category
+    ├── file_b.csv              # Minimal demo — comparison side
+    ├── sample_a.csv            # Full contracting dataset (11 rows)
+    └── sample_b.csv            # Full contracting dataset (10 rows)
 ```
 
 ---
@@ -212,13 +232,16 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 ---
 
-## Current limitations
+## Current Limitations
 
 - **Single-sheet Excel only.** Multi-sheet Excel workbooks are read from Sheet 1 only.
-- **String comparison only.** All values are compared as normalized strings; numeric tolerance (e.g., rounding) is not supported.
-- **No date-aware diffing.** Date fields that differ only in format (e.g., `01/15/2024` vs `2024-01-15`) will be flagged as changes.
-- **Memory-bound.** Very large files (500k+ rows) may be slow or exhaust browser memory. For large datasets, pre-filter or chunk before uploading.
-- **No authentication.** The Streamlit app has no login wall. Do not deploy to a public URL with sensitive government data unless appropriate controls are in place.
+- **String comparison only.** All values are compared as normalized strings; numeric tolerance, rounding, and threshold-based comparisons are not yet supported.
+- **No date-aware diffing.** Date fields that differ only in format, such as `01/15/2024` vs `2024-01-15`, may be flagged as changes.
+- **Memory-bound processing.** Very large files, especially 500k+ rows, may be slow or exhaust browser/session memory. For large datasets, pre-filter, sample, or chunk before uploading.
+- **No authentication.** The Streamlit app has no login wall. Do not deploy to a public URL with sensitive government data unless appropriate security controls are in place.
+- **No persistent saved configurations.** Key selections and comparison mappings must be selected each session.
+- **No row-level analyst annotations yet.**
+- **No scheduled/automated runs yet.**
 
 ---
 
@@ -226,27 +249,37 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 | Error | Cause | Fix |
 |---|---|---|
-| `Duplicate column names detected` | Two columns share the same name | Rename the duplicate in the source file |
-| `Columns not found in File A key columns` | Selected column no longer matches after re-upload | Re-select after uploading |
-| `Key column counts must match` | Different number of keys selected for A vs B | Select the same count in each file |
-| `Could not parse Excel file` | File may be password-protected or corrupted | Save as new `.xlsx` from Excel and re-upload |
+| `Duplicate column names detected` | Two columns share the same name | Rename the duplicate column in the source file |
+| `Columns not found in File A key columns` | Selected column no longer matches after re-upload | Re-select key columns after uploading |
+| `Key column counts must match` | Different number of keys selected for File A vs File B | Select the same number of key columns in each file |
+| `Could not parse Excel file` | File may be password-protected, corrupted, or unsupported | Save as a new `.xlsx` from Excel and re-upload |
 | `The uploaded file contains no data rows` | File has headers only | Confirm the file has data rows below the header |
+| No comparison columns selected | User selected keys only | Select non-key fields if field-level change detection is needed |
+| Report export failed | Workbook generation issue or invalid sheet data | Re-run analysis and check for unsupported values |
 
 ---
 
 ## Roadmap
 
-### Near-term
-- [ ] Multi-sheet Excel support (let user select which sheet to load)
-- [ ] Date normalization options (parse and compare as dates, not strings)
+### Near-Term
+- [ ] Multi-sheet Excel support with sheet selector
+- [ ] Date normalization options
 - [ ] Numeric tolerance option for amount fields
-- [ ] Saved configuration profiles (persist key/comparison column selections)
-- [ ] Column rename mapping UI (map `Case_ID` in A to `CaseNumber` in B without manual selection)
+- [ ] Saved configuration profiles
+- [ ] Column rename/mapping UI
+- [ ] Improved large-file handling
+- [ ] More robust data quality checks
 
-### Medium-term
-- [ ] PDF report export (leadership briefing format)
-- [ ] Scheduled / automated comparison runs via CLI
-- [ ] Row-level audit log with user annotations
+### Medium-Term
+- [ ] PDF report export for leadership briefings
+- [ ] Scheduled or automated comparison runs via CLI
+- [ ] Row-level audit log with analyst annotations
+- [ ] Reconciliation modes for DFAS, M&RA Package Tracking, Veteran Case Tracking, and Generic Delta Analysis
+- [ ] Optional deployment guide for secure internal environments
 
-### Out of scope (for now)
-- SharePoint, ADVANA, Azure SQL, or Power BI integrations (Phase 4 — deferred)
+### Longer-Term
+- [ ] Authentication and role-based access
+- [ ] Database-backed processing for large files
+- [ ] SharePoint/OneDrive file integration
+- [ ] ADVANA/export pipeline integration
+- [ ] Power BI-ready output tables

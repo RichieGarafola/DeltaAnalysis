@@ -1,0 +1,5 @@
+RecordID,Name,Status,Amount,ReviewedBy
+R001,Alpha Corporation,Approved,15000,J. Smith
+R002,Bravo Logistics,Approved,9000,M. Jones
+R005,Echo Services,Pending,11200,R. Davis
+R004,Delta Defense,Approved,4750,J. Smith

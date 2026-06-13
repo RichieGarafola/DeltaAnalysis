@@ -1,0 +1,7 @@
+RecordID,Name,Status,Amount,ReviewedBy
+R001,Alpha Corporation,Approved,15000,J. Smith
+R002,Bravo Logistics,Pending,8500,M. Jones
+R003,Charlie Systems,Denied,22000,T. Brown
+R004,Delta Defense,Approved,4750,J. Smith
+R004,Delta Defense,Approved,4750,J. Smith
+,Unknown Vendor,Pending,500,M. Jones

@@ -301,17 +301,19 @@ if "result" in st.session_state:
     st.divider()
     st.markdown('<div class="section-title">Results Dashboard</div>', unsafe_allow_html=True)
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Only in File A",        f"{n_only_a:,}",  help="Key present in A but not B")
-    m2.metric("Only in File B",        f"{n_only_b:,}",  help="Key present in B but not A")
-    m3.metric("Matched Records",       f"{n_matched:,}", help="Common key in both files")
-    m4.metric("Records with Changes",  f"{n_changed:,}", help="Matched records where a compared field differs")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("File A — Total",       f"{result.total_a:,}", help="Total records loaded from File A")
+    k2.metric("File B — Total",       f"{result.total_b:,}", help="Total records loaded from File B")
+    k3.metric("Only in File A",       f"{n_only_a:,}",       help="Key present in A but not B")
+    k4.metric("Only in File B",       f"{n_only_b:,}",       help="Key present in B but not A")
+    k5.metric("Matched Records",      f"{n_matched:,}",      help="Common key in both files")
 
-    m5, m6, m7, m8 = st.columns(4)
-    m5.metric("Duplicate Keys — A",    f"{n_dup_a:,}",   help="Rows sharing a key within File A")
-    m6.metric("Duplicate Keys — B",    f"{n_dup_b:,}",   help="Rows sharing a key within File B")
-    m7.metric("Blank Keys — A",        f"{n_blank_a:,}", help="Rows with null/blank key in File A")
-    m8.metric("Blank Keys — B",        f"{n_blank_b:,}", help="Rows with null/blank key in File B")
+    k6, k7, k8, k9, k10 = st.columns(5)
+    k6.metric("Records with Changes", f"{n_changed:,}",      help="Matched records where a compared field differs")
+    k7.metric("Duplicate Keys — A",   f"{n_dup_a:,}",        help="Rows sharing a key within File A")
+    k8.metric("Duplicate Keys — B",   f"{n_dup_b:,}",        help="Rows sharing a key within File B")
+    k9.metric("Blank Keys — A",       f"{n_blank_a:,}",      help="Rows with null/blank key in File A")
+    k10.metric("Blank Keys — B",      f"{n_blank_b:,}",      help="Rows with null/blank key in File B")
 
     # -----------------------------------------------------------------------
     # Visualizations
