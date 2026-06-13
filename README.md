@@ -1,4 +1,6 @@
-# Delta Analysis Tool
+# DeltaAnalysis
+
+> In-depth Delta Analysis platform. Performs bidirectional delta analysis and provides a detailed, client-facing report.
 
 [![Tests](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml/badge.svg)](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml)
 
@@ -194,6 +196,22 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 ---
 
+## Screenshots
+
+*Screenshots placeholder — add after first deployment.*
+
+---
+
+## Government use cases
+
+- **DFAS receipt reconciliation** — match invoices by contract number; flag amount or status changes
+- **M&RA package tracking** — compare weekly extracts; surface new submissions and status deltas
+- **Duplicate submission review** — identify cases where the same ID appears multiple times
+- **Operational reporting** — produce a briefing-ready delta between two reporting periods
+- **Audit support** — every result category is traceable to its source rows; Excel export is sharable and self-contained
+
+---
+
 ## Current limitations
 
 - **Single-sheet Excel only.** Multi-sheet Excel workbooks are read from Sheet 1 only.
@@ -201,6 +219,18 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 - **No date-aware diffing.** Date fields that differ only in format (e.g., `01/15/2024` vs `2024-01-15`) will be flagged as changes.
 - **Memory-bound.** Very large files (500k+ rows) may be slow or exhaust browser memory. For large datasets, pre-filter or chunk before uploading.
 - **No authentication.** The Streamlit app has no login wall. Do not deploy to a public URL with sensitive government data unless appropriate controls are in place.
+
+---
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Duplicate column names detected` | Two columns share the same name | Rename the duplicate in the source file |
+| `Columns not found in File A key columns` | Selected column no longer matches after re-upload | Re-select after uploading |
+| `Key column counts must match` | Different number of keys selected for A vs B | Select the same count in each file |
+| `Could not parse Excel file` | File may be password-protected or corrupted | Save as new `.xlsx` from Excel and re-upload |
+| `The uploaded file contains no data rows` | File has headers only | Confirm the file has data rows below the header |
 
 ---
 
@@ -220,25 +250,3 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 ### Out of scope (for now)
 - SharePoint, ADVANA, Azure SQL, or Power BI integrations (Phase 4 — deferred)
-
----
-
-## Troubleshooting
-
-| Error | Cause | Fix |
-|---|---|---|
-| `Duplicate column names detected` | Two columns share the same name | Rename the duplicate in the source file |
-| `Columns not found in File A key columns` | Selected column no longer matches after re-upload | Re-select after uploading |
-| `Key column counts must match` | Different number of keys selected for A vs B | Select the same count in each file |
-| `Could not parse Excel file` | File may be password-protected or corrupted | Save as new `.xlsx` from Excel and re-upload |
-| `The uploaded file contains no data rows` | File has headers only | Confirm the file has data rows below the header |
-
----
-
-## Use cases
-
-- **DFAS receipt reconciliation** — match invoices by contract number; flag amount or status changes
-- **M&RA package tracking** — compare weekly extracts; surface new submissions and status deltas
-- **Duplicate submission review** — identify cases where the same ID appears multiple times
-- **Operational reporting** — produce a briefing-ready delta between two reporting periods
-- **Audit support** — every result category is traceable to its source rows; Excel export is sharable and self-contained
