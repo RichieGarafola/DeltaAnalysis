@@ -7,7 +7,7 @@ difference needed for audit-grade reporting.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 import pandas as pd

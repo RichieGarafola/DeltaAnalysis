@@ -12,7 +12,6 @@ from datetime import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import streamlit as st
 
 from src.delta_engine import DeltaResult, run_delta
