@@ -131,7 +131,6 @@ def export_to_excel(
     """
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    summary_df   = build_summary_df(result)
     narrative    = _build_narrative(result, file_a_name, file_b_name, run_timestamp)
     delta_counts = _build_delta_counts_df(result)
 
@@ -353,8 +352,8 @@ def _build_rules_df(result: DeltaResult) -> pd.DataFrame:
     rows = []
     for rule in result.comparison_rules:
         rows.append({
-            "Column (File A)":  rule.get("column_a", ""),
-            "Column (File B)":  rule.get("column_b", ""),
+            "Baseline Field":   rule.get("column_a", ""),
+            "Comparison Field": rule.get("column_b", ""),
             "Type":             rule.get("type", "text"),
             "Tolerance":        rule.get("tolerance", "") if rule.get("tolerance") is not None else "",
             "Date Mode":        rule.get("date_mode", "") if rule.get("date_mode") is not None else "",

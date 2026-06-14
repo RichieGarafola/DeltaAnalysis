@@ -94,7 +94,7 @@ def run_delta(
     if len(key_cols_a) != len(key_cols_b):
         raise ValueError(
             f"Key column counts must match: "
-            f"File A has {len(key_cols_a)}, File B has {len(key_cols_b)}."
+            f"Baseline has {len(key_cols_a)}, Comparison has {len(key_cols_b)}."
         )
 
     if compare_cols_a or compare_cols_b:
@@ -103,7 +103,7 @@ def run_delta(
         if len(compare_cols_a) != len(compare_cols_b):
             raise ValueError(
                 f"Comparison column counts must match: "
-                f"File A has {len(compare_cols_a)}, File B has {len(compare_cols_b)}."
+                f"Baseline has {len(compare_cols_a)}, Comparison has {len(compare_cols_b)}."
             )
 
     total_a = len(df_a)
