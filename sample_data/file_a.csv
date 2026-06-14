@@ -1,7 +1,7 @@
 RecordID,Name,Status,Amount,ReviewedBy
-R001,Alpha Corporation,Approved,15000,J. Smith
-R002,Bravo Logistics,Pending,8500,M. Jones
-R003,Charlie Systems,Denied,22000,T. Brown
-R004,Delta Defense,Approved,4750,J. Smith
-R004,Delta Defense,Approved,4750,J. Smith
-,Unknown Vendor,Pending,500,M. Jones
+R001,Northgate Defense Systems LLC,Approved,15000.00,CPT Martinez
+R002,Meridian Logistics Group Inc,Pending,8500.00,MAJ Williams
+R003,Sentinel Technical Services LLC,Denied,22000.00,LTC Brown
+R004,Ironridge Maintenance Corp,Approved,4750.00,CPT Martinez
+R004,Ironridge Maintenance Corp,Approved,4750.00,CPT Martinez
+,Unlisted Vendor,Pending,500.00,MAJ Williams

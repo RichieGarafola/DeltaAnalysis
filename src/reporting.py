@@ -40,25 +40,25 @@ COLORS = {
 }
 
 _HEADER_COLORS = {
-    "Executive Summary":     COLORS["slate"],
-    "Analysis Metadata":     COLORS["slate"],
-    "Comparison Rules":      COLORS["slate"],
-    "Delta Counts":          COLORS["navy"],
-    "Only in File A":        COLORS["dark_red"],
-    "Only in File B":        COLORS["dark_green"],
-    "Matched Records":       COLORS["navy"],
-    "Changed Records":       COLORS["amber"],
-    "Duplicate Keys File A": COLORS["orange"],
-    "Duplicate Keys File B": COLORS["orange"],
-    "Data Quality Issues":   COLORS["purple"],
+    "Executive Summary":                COLORS["slate"],
+    "Analysis Metadata":                COLORS["slate"],
+    "Comparison Rules":                 COLORS["slate"],
+    "Delta Counts":                     COLORS["navy"],
+    "Baseline Only Records":            COLORS["dark_red"],
+    "Comparison Only Records":          COLORS["dark_green"],
+    "Matched Records":                  COLORS["navy"],
+    "Records with Differences":         COLORS["amber"],
+    "Baseline Duplicate Identifiers":   COLORS["orange"],
+    "Comparison Duplicate Identifiers": COLORS["orange"],
+    "Data Quality Flags":               COLORS["purple"],
 }
 
 _ROW_FILL_COLORS = {
-    "Only in File A":        COLORS["light_red"],
-    "Only in File B":        COLORS["light_green"],
-    "Changed Records":       COLORS["light_amber"],
-    "Duplicate Keys File A": COLORS["light_amber"],
-    "Duplicate Keys File B": COLORS["light_amber"],
+    "Baseline Only Records":           COLORS["light_red"],
+    "Comparison Only Records":         COLORS["light_green"],
+    "Records with Differences":        COLORS["light_amber"],
+    "Baseline Duplicate Identifiers":  COLORS["light_amber"],
+    "Comparison Duplicate Identifiers":COLORS["light_amber"],
 }
 
 
@@ -78,19 +78,19 @@ def build_summary_df(result: DeltaResult) -> pd.DataFrame:
         return f"{n / denom * 100:.1f}%"
 
     rows = [
-        ("File A — Total Records",          total_a,                   ""),
-        ("File B — Total Records",          total_b,                   ""),
-        ("Records Only in File A",          len(result.only_in_a),     pct(len(result.only_in_a), total_a)),
-        ("Records Only in File B",          len(result.only_in_b),     pct(len(result.only_in_b), total_b)),
-        ("Records Matched (common keys)",   n_matched,                 pct(n_matched, total_a)),
-        ("Records with Field Changes",      len(result.changed),       pct(len(result.changed), n_matched) if n_matched else "N/A"),
-        ("Duplicate Key Rows — File A",     len(result.duplicates_a),  pct(len(result.duplicates_a), total_a)),
-        ("Duplicate Key Rows — File B",     len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
-        ("Blank / Null Key Rows — File A",  len(result.blank_keys_a),  pct(len(result.blank_keys_a), total_a)),
-        ("Blank / Null Key Rows — File B",  len(result.blank_keys_b),  pct(len(result.blank_keys_b), total_b)),
+        ("Baseline Dataset — Total Records",       total_a,                   ""),
+        ("Comparison Dataset — Total Records",     total_b,                   ""),
+        ("Baseline Only Records",                  len(result.only_in_a),     pct(len(result.only_in_a), total_a)),
+        ("Comparison Only Records",                len(result.only_in_b),     pct(len(result.only_in_b), total_b)),
+        ("Matched Records",                        n_matched,                 pct(n_matched, total_a)),
+        ("Records with Differences",               len(result.changed),       pct(len(result.changed), n_matched) if n_matched else "N/A"),
+        ("Baseline Duplicate Identifiers",         len(result.duplicates_a),  pct(len(result.duplicates_a), total_a)),
+        ("Comparison Duplicate Identifiers",       len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
+        ("Baseline Missing Identifiers",           len(result.blank_keys_a),  pct(len(result.blank_keys_a), total_a)),
+        ("Comparison Missing Identifiers",         len(result.blank_keys_b),  pct(len(result.blank_keys_b), total_b)),
     ]
 
-    return pd.DataFrame(rows, columns=["Metric", "Count", "% of File Total"])
+    return pd.DataFrame(rows, columns=["Metric", "Count", "% of Dataset Total"])
 
 
 # ---------------------------------------------------------------------------
@@ -104,8 +104,8 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
 
     rows = []
     for col in result.compare_cols_a:
-        a_col = f"{col} — File A"
-        b_col = f"{col} — File B"
+        a_col = f"{col} — Baseline"
+        b_col = f"{col} — Comparison"
         if a_col in result.changed.columns and b_col in result.changed.columns:
             n_changed = (result.changed[a_col] != result.changed[b_col]).sum()
             rows.append({"Field": col, "Changes": int(n_changed)})
@@ -133,13 +133,13 @@ def export_to_excel(
     narrative    = _build_narrative(result, file_a_name, file_b_name, run_timestamp)
     delta_counts = _build_delta_counts_df(result)
 
-    # Data Quality Issues — blank keys only (duplicates have their own tabs)
+    # Data Quality Flags — rows excluded due to missing match key identifiers
     dq_rows: list[dict] = []
     for _, row in result.blank_keys_a.iterrows():
-        dq_rows.append({"Source File": file_a_name, "Issue Type": "Blank / Null Key", **row.to_dict()})
+        dq_rows.append({"Dataset": "Baseline", "Filename": file_a_name, "Flag": "Missing Identifier", **row.to_dict()})
     for _, row in result.blank_keys_b.iterrows():
-        dq_rows.append({"Source File": file_b_name, "Issue Type": "Blank / Null Key", **row.to_dict()})
-    dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Source File", "Issue Type"])
+        dq_rows.append({"Dataset": "Comparison", "Filename": file_b_name, "Flag": "Missing Identifier", **row.to_dict()})
+    dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Dataset", "Filename", "Flag"])
 
     metadata_df = _build_metadata_df(result, file_a_name, file_b_name, run_timestamp)
     rules_df    = _build_rules_df(result)
@@ -150,13 +150,13 @@ def export_to_excel(
         metadata_df.to_excel(writer,            sheet_name="Analysis Metadata",     index=False)
         rules_df.to_excel(writer,               sheet_name="Comparison Rules",      index=False)
         delta_counts.to_excel(writer,           sheet_name="Delta Counts",          index=False)
-        _write_sheet(result.only_in_a,    writer, "Only in File A")
-        _write_sheet(result.only_in_b,    writer, "Only in File B")
+        _write_sheet(result.only_in_a,    writer, "Baseline Only Records")
+        _write_sheet(result.only_in_b,    writer, "Comparison Only Records")
         _write_sheet(result.matched,      writer, "Matched Records")
-        _write_sheet(result.changed,      writer, "Changed Records")
-        _write_sheet(result.duplicates_a, writer, "Duplicate Keys File A")
-        _write_sheet(result.duplicates_b, writer, "Duplicate Keys File B")
-        _write_sheet(dq_df,               writer, "Data Quality Issues")
+        _write_sheet(result.changed,      writer, "Records with Differences")
+        _write_sheet(result.duplicates_a, writer, "Baseline Duplicate Identifiers")
+        _write_sheet(result.duplicates_b, writer, "Comparison Duplicate Identifiers")
+        _write_sheet(dq_df,               writer, "Data Quality Flags")
 
     # Post-process: styling
     buffer.seek(0)
@@ -196,81 +196,94 @@ def _build_narrative(
     def pct(n, d):
         return f"{n / d * 100:.1f}%" if d else "N/A"
 
-    key_label = " + ".join(result.key_cols_a) if result.key_cols_a else "configured key(s)"
+    key_label = " + ".join(result.key_cols_a) if result.key_cols_a else "configured match key(s)"
 
     overview = (
-        f"This analysis compared {total_a:,} records from {file_a_name} against "
-        f"{total_b:,} records from {file_b_name} using the key field(s): {key_label}. "
-        f"The analysis was run on {run_timestamp}."
+        f"A bidirectional reconciliation was performed between the baseline dataset ({file_a_name}, "
+        f"{total_a:,} records) and the comparison dataset ({file_b_name}, {total_b:,} records). "
+        f"Records were matched using the identifier field(s): {key_label}. "
+        f"Analysis completed: {run_timestamp}."
     )
 
     matching = (
-        f"{n_matched:,} records ({pct(n_matched, total_a)} of File A) were successfully matched "
-        f"between both files. "
-        f"{n_only_a:,} records ({pct(n_only_a, total_a)} of File A) were present only in {file_a_name} "
-        f"and may represent deleted, withdrawn, or unsubmitted entries. "
-        f"{n_only_b:,} records ({pct(n_only_b, total_b)} of File B) were present only in {file_b_name} "
-        f"and may represent new submissions or entries not yet in the baseline."
+        f"Of the {total_a:,} baseline records, {n_matched:,} ({pct(n_matched, total_a)}) were "
+        f"matched to a corresponding record in the comparison dataset. "
+        f"{n_only_a:,} records ({pct(n_only_a, total_a)} of baseline) appear exclusively in "
+        f"{file_a_name} and are absent from the comparison dataset — these may represent "
+        f"withdrawn entries, pending submissions, or records not yet reflected in the comparison source. "
+        f"{n_only_b:,} records ({pct(n_only_b, total_b)} of comparison) appear exclusively in "
+        f"{file_b_name} and have no corresponding baseline entry — these may represent new "
+        f"submissions, late arrivals, or records not yet posted to the baseline."
     )
 
     if result.compare_cols_a:
         compare_label = ", ".join(result.compare_cols_a)
-        changes = (
-            f"Of the {n_matched:,} matched records, {n_changed:,} ({pct(n_changed, n_matched)}) "
-            f"had at least one field-level difference in the compared columns: {compare_label}. "
-            f"These records are listed in the 'Changed Records' tab with before/after values for each changed field."
-        )
+        if n_changed == 0:
+            changes = (
+                f"All {n_matched:,} matched records were identical across the compared fields "
+                f"({compare_label}). No field-level differences were detected."
+            )
+        else:
+            changes = (
+                f"Of the {n_matched:,} matched records, {n_changed:,} ({pct(n_changed, n_matched)}) "
+                f"contained at least one field-level difference in the following compared fields: "
+                f"{compare_label}. Before and after values for each difference are detailed in the "
+                f"'Records with Differences' worksheet."
+            )
     else:
         changes = (
-            "No comparison columns were configured for this run. "
-            "Field-level change detection was not performed. "
-            "Re-run the analysis with comparison columns selected to identify value changes."
+            "Field-level comparison was not configured for this run. To identify value-level "
+            "differences between matched records, re-run the analysis with one or more "
+            "comparison fields selected."
         )
 
     if n_dup_a > 0 or n_dup_b > 0:
         duplicates = (
-            f"{n_dup_a:,} rows in {file_a_name} and {n_dup_b:,} rows in {file_b_name} "
-            f"share a key with at least one other row in the same file. "
-            f"Duplicate submissions or data entry errors should be reviewed before this data "
-            f"is used for official reporting. Only the first occurrence of each duplicate key "
-            f"was used in the matching process."
+            f"{n_dup_a:,} baseline record(s) and {n_dup_b:,} comparison record(s) share a "
+            f"match key with at least one other row in the same dataset. All duplicate rows are "
+            f"documented in the identifier worksheets; only the first occurrence of each "
+            f"identifier was used in the matching process. Duplicate submissions should be "
+            f"investigated and resolved in the source system prior to any official reporting."
         )
     else:
         duplicates = (
-            f"No duplicate keys were detected in either file. "
-            f"Both datasets appear to have unique records per key."
+            f"No duplicate identifiers were detected in either dataset. "
+            f"Both {file_a_name} and {file_b_name} contain unique records per match key."
         )
 
     if n_blank_a > 0 or n_blank_b > 0:
         blanks = (
-            f"{n_blank_a:,} rows in {file_a_name} and {n_blank_b:,} rows in {file_b_name} "
-            f"had blank or null values in the key field(s) and could not be matched. "
-            f"These rows are listed in the 'Data Quality Issues' tab and should be corrected "
-            f"in the source system before the next analysis cycle."
+            f"{n_blank_a:,} baseline record(s) and {n_blank_b:,} comparison record(s) contained "
+            f"a blank or null value in the match key field(s) and were excluded from the "
+            f"reconciliation. These records are captured in the Data Quality Flags worksheet. "
+            f"Source system corrections are required before these records can be included in "
+            f"future analysis cycles."
         )
     else:
         blanks = (
-            f"No blank or null key values were detected. "
-            f"All rows in both files had valid key values."
+            f"No missing identifier values were detected. All records in both datasets carried "
+            f"valid, non-null match key values and were eligible for reconciliation."
         )
 
     recommendation = (
-        f"Recommended next steps: (1) Resolve the {n_only_a:,} records only in {file_a_name} "
-        f"by confirming whether they were intentionally removed or require resubmission. "
-        f"(2) Validate the {n_only_b:,} records only in {file_b_name} against the authoritative "
-        f"source of record. "
-        f"(3) Review the {n_changed:,} changed records for unauthorized modifications or "
-        f"legitimate updates. "
-        f"(4) Correct all data quality issues (duplicates and blank keys) in the source system."
+        f"Priority actions: "
+        f"(1) Investigate {n_only_a:,} baseline-only record(s) — confirm whether these represent "
+        f"intentional removals, pending resubmissions, or data feed gaps. "
+        f"(2) Validate {n_only_b:,} comparison-only record(s) against the authoritative source "
+        f"of record before accepting as new entries. "
+        f"(3) Review {n_changed:,} record(s) with field-level differences to determine whether "
+        f"changes reflect authorized updates or require correction. "
+        f"(4) Resolve all data quality flags — duplicate identifiers and missing key values — "
+        f"at the source system level."
     )
 
     return [
-        ("Analysis Overview",    overview),
-        ("Matching Results",     matching),
-        ("Field-Level Changes",  changes),
-        ("Duplicate Key Review", duplicates),
-        ("Blank Key Review",     blanks),
-        ("Recommended Actions",  recommendation),
+        ("Analysis Overview",       overview),
+        ("Matching Results",        matching),
+        ("Field-Level Differences", changes),
+        ("Duplicate Identifiers",   duplicates),
+        ("Missing Identifiers",     blanks),
+        ("Recommended Actions",     recommendation),
     ]
 
 
@@ -279,18 +292,18 @@ def _build_narrative(
 # ---------------------------------------------------------------------------
 
 def _build_delta_counts_df(result: DeltaResult) -> pd.DataFrame:
-    """Flat table of every delta count — useful for quick reference."""
+    """Flat reconciliation count table suitable for pivot tables and downstream reporting."""
     return pd.DataFrame([
-        {"Category": "File A — Total Records",          "Count": result.total_a,              "File": "A"},
-        {"Category": "File B — Total Records",          "Count": result.total_b,              "File": "B"},
-        {"Category": "Only in File A",                  "Count": len(result.only_in_a),       "File": "A"},
-        {"Category": "Only in File B",                  "Count": len(result.only_in_b),       "File": "B"},
-        {"Category": "Matched Records",                 "Count": len(result.matched),         "File": "Both"},
-        {"Category": "Changed Records",                 "Count": len(result.changed),         "File": "Both"},
-        {"Category": "Duplicate Key Rows — File A",     "Count": len(result.duplicates_a),    "File": "A"},
-        {"Category": "Duplicate Key Rows — File B",     "Count": len(result.duplicates_b),    "File": "B"},
-        {"Category": "Blank / Null Key Rows — File A",  "Count": len(result.blank_keys_a),    "File": "A"},
-        {"Category": "Blank / Null Key Rows — File B",  "Count": len(result.blank_keys_b),    "File": "B"},
+        {"Category": "Baseline Dataset — Total Records",    "Count": result.total_a,              "Source": "Baseline"},
+        {"Category": "Comparison Dataset — Total Records",  "Count": result.total_b,              "Source": "Comparison"},
+        {"Category": "Baseline Only Records",               "Count": len(result.only_in_a),       "Source": "Baseline"},
+        {"Category": "Comparison Only Records",             "Count": len(result.only_in_b),       "Source": "Comparison"},
+        {"Category": "Matched Records",                     "Count": len(result.matched),         "Source": "Both"},
+        {"Category": "Records with Differences",            "Count": len(result.changed),         "Source": "Both"},
+        {"Category": "Baseline Duplicate Identifiers",      "Count": len(result.duplicates_a),    "Source": "Baseline"},
+        {"Category": "Comparison Duplicate Identifiers",    "Count": len(result.duplicates_b),    "Source": "Comparison"},
+        {"Category": "Baseline Missing Identifiers",        "Count": len(result.blank_keys_a),    "Source": "Baseline"},
+        {"Category": "Comparison Missing Identifiers",      "Count": len(result.blank_keys_b),    "Source": "Comparison"},
     ])
 
 
@@ -298,7 +311,7 @@ def _write_sheet(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str) -> N
     if df is not None and not df.empty:
         df.to_excel(writer, sheet_name=sheet_name, index=False)
     else:
-        pd.DataFrame([["No records found for this category."]]).to_excel(
+        pd.DataFrame([["No records in this category."]]).to_excel(
             writer, sheet_name=sheet_name, index=False, header=False
         )
 
@@ -311,19 +324,19 @@ def _build_metadata_df(
 ) -> pd.DataFrame:
     """Tabular run metadata for the Analysis Metadata tab."""
     rows = [
-        ("Run Timestamp",            run_timestamp),
-        ("File A Name",              file_a_name),
-        ("File A Sheet",             result.sheet_a or "N/A (first sheet / CSV)"),
-        ("File A Row Count",         str(result.total_a)),
-        ("File B Name",              file_b_name),
-        ("File B Sheet",             result.sheet_b or "N/A (first sheet / CSV)"),
-        ("File B Row Count",         str(result.total_b)),
-        ("Key Columns (File A)",     ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
-        ("Key Columns (File B)",     ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
-        ("Comparison Columns (A)",   ", ".join(result.compare_cols_a) if result.compare_cols_a else "None"),
-        ("Comparison Columns (B)",   ", ".join(result.compare_cols_b) if result.compare_cols_b else "None"),
-        ("Comparison Rule Count",    str(len(result.comparison_rules))),
-        ("Parse Issues Detected",    str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
+        ("Analysis Timestamp",                   run_timestamp),
+        ("Baseline Dataset",                     file_a_name),
+        ("Baseline Sheet / Tab",                 result.sheet_a or "Default (first sheet or CSV)"),
+        ("Baseline Record Count",                str(result.total_a)),
+        ("Comparison Dataset",                   file_b_name),
+        ("Comparison Sheet / Tab",               result.sheet_b or "Default (first sheet or CSV)"),
+        ("Comparison Record Count",              str(result.total_b)),
+        ("Match Key Fields (Baseline)",          ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
+        ("Match Key Fields (Comparison)",        ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
+        ("Comparison Fields (Baseline)",         ", ".join(result.compare_cols_a) if result.compare_cols_a else "None configured"),
+        ("Comparison Fields (Comparison)",       ", ".join(result.compare_cols_b) if result.compare_cols_b else "None configured"),
+        ("Comparison Rules Applied",             str(len(result.comparison_rules))),
+        ("Parse Warnings",                       str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
     ]
     return pd.DataFrame(rows, columns=["Parameter", "Value"])
 

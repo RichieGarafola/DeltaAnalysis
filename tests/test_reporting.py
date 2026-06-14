@@ -70,18 +70,18 @@ class TestBuildSummaryDf:
 
     def test_has_required_columns(self):
         df = build_summary_df(_make_result())
-        assert list(df.columns) == ["Metric", "Count", "% of File Total"]
+        assert list(df.columns) == ["Metric", "Count", "% of Dataset Total"]
 
     def test_total_a_correct(self):
         result = _make_result()
         df = build_summary_df(result)
-        row = df[df["Metric"] == "File A — Total Records"]
+        row = df[df["Metric"] == "Baseline Dataset — Total Records"]
         assert int(row["Count"].iloc[0]) == result.total_a
 
     def test_total_b_correct(self):
         result = _make_result()
         df = build_summary_df(result)
-        row = df[df["Metric"] == "File B — Total Records"]
+        row = df[df["Metric"] == "Comparison Dataset — Total Records"]
         assert int(row["Count"].iloc[0]) == result.total_b
 
     def test_zero_total_b_returns_na_percentages(self):
@@ -91,12 +91,12 @@ class TestBuildSummaryDf:
         result = run_delta(df_a, df_b, ["id"], ["id"])
         df = build_summary_df(result)
         # B-denominator rows should produce "N/A", not a crash
-        b_row = df[df["Metric"] == "Records Only in File B"]
-        assert b_row["% of File Total"].iloc[0] == "N/A"
+        b_row = df[df["Metric"] == "Comparison Only Records"]
+        assert b_row["% of Dataset Total"].iloc[0] == "N/A"
 
     def test_pct_column_valid_values(self):
         df = build_summary_df(_make_result())
-        for val in df["% of File Total"]:
+        for val in df["% of Dataset Total"]:
             # Each cell is: a percent string, "N/A", or "" (blank for total rows)
             assert str(val).endswith("%") or val in ("N/A", "")
 
@@ -136,16 +136,18 @@ REQUIRED_SHEETS = [
     "Analysis Metadata",
     "Comparison Rules",
     "Delta Counts",
-    "Only in File A",
-    "Only in File B",
+    "Baseline Only Records",
+    "Comparison Only Records",
     "Matched Records",
-    "Changed Records",
-    "Duplicate Keys File A",
-    "Duplicate Keys File B",
-    "Data Quality Issues",
+    "Records with Differences",
+    "Baseline Duplicate Identifiers",
+    "Comparison Duplicate Identifiers",
+    "Data Quality Flags",
 ]
 
-REMOVED_SHEETS = ["Summary"]
+REMOVED_SHEETS = ["Summary", "Only in File A", "Only in File B",
+                  "Changed Records", "Duplicate Keys File A",
+                  "Duplicate Keys File B", "Data Quality Issues"]
 
 
 class TestExcelSheetNames:
@@ -212,29 +214,29 @@ class TestExcelSheetNames:
         ws = wb["Delta Counts"]
         assert ws.max_row >= 2
 
-    def test_only_in_a_present(self):
+    def test_baseline_only_records_present(self):
         wb = self._load_wb()
-        assert "Only in File A" in wb.sheetnames
+        assert "Baseline Only Records" in wb.sheetnames
 
-    def test_only_in_b_present(self):
+    def test_comparison_only_records_present(self):
         wb = self._load_wb()
-        assert "Only in File B" in wb.sheetnames
+        assert "Comparison Only Records" in wb.sheetnames
 
-    def test_changed_records_present(self):
+    def test_records_with_differences_present(self):
         wb = self._load_wb()
-        assert "Changed Records" in wb.sheetnames
+        assert "Records with Differences" in wb.sheetnames
 
-    def test_duplicate_keys_a_present(self):
+    def test_baseline_duplicates_present(self):
         wb = self._load_wb()
-        assert "Duplicate Keys File A" in wb.sheetnames
+        assert "Baseline Duplicate Identifiers" in wb.sheetnames
 
-    def test_duplicate_keys_b_present(self):
+    def test_comparison_duplicates_present(self):
         wb = self._load_wb()
-        assert "Duplicate Keys File B" in wb.sheetnames
+        assert "Comparison Duplicate Identifiers" in wb.sheetnames
 
-    def test_data_quality_issues_present(self):
+    def test_data_quality_flags_present(self):
         wb = self._load_wb()
-        assert "Data Quality Issues" in wb.sheetnames
+        assert "Data Quality Flags" in wb.sheetnames
 
     def test_returns_bytes(self):
         raw = export_to_excel(_make_result())

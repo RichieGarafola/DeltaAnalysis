@@ -37,13 +37,13 @@ REQUIRED_SHEETS = [
     "Analysis Metadata",
     "Comparison Rules",
     "Delta Counts",
-    "Only in File A",
-    "Only in File B",
+    "Baseline Only Records",
+    "Comparison Only Records",
     "Matched Records",
-    "Changed Records",
-    "Duplicate Keys File A",
-    "Duplicate Keys File B",
-    "Data Quality Issues",
+    "Records with Differences",
+    "Baseline Duplicate Identifiers",
+    "Comparison Duplicate Identifiers",
+    "Data Quality Flags",
 ]
 
 
@@ -149,7 +149,7 @@ class TestExcelVsExcel:
 
     def test_workbook_valid(self):
         wb, _ = _wb_from_result(self._run(), "a.xlsx", "b.xlsx")
-        assert "Changed Records" in wb.sheetnames
+        assert "Records with Differences" in wb.sheetnames
 
 
 # ---------------------------------------------------------------------------
@@ -345,10 +345,13 @@ class TestWorkbookVerification:
         for sheet in REQUIRED_SHEETS:
             assert sheet in wb.sheetnames, f"Missing: '{sheet}'"
 
-    def test_no_legacy_summary_sheet(self):
+    def test_no_legacy_sheets(self):
         r = self._full_result()
         wb, _ = _wb_from_result(r)
-        assert "Summary" not in wb.sheetnames
+        for legacy in ("Summary", "Only in File A", "Only in File B",
+                       "Changed Records", "Duplicate Keys File A",
+                       "Duplicate Keys File B", "Data Quality Issues"):
+            assert legacy not in wb.sheetnames, f"Legacy sheet still present: '{legacy}'"
 
     def test_exactly_11_sheets(self):
         r = self._full_result()
@@ -362,7 +365,7 @@ class TestWorkbookVerification:
         sections = [str(ws.cell(row=i, column=1).value) for i in range(2, ws.max_row + 1)]
         assert "Analysis Overview" in sections
         assert "Matching Results" in sections
-        assert "Field-Level Changes" in sections
+        assert "Field-Level Differences" in sections
         assert "Recommended Actions" in sections
 
     def test_analysis_metadata_all_parameters(self):
@@ -370,12 +373,12 @@ class TestWorkbookVerification:
         wb, _ = _wb_from_result(r, "a.xlsx", "b.xlsx")
         ws = wb["Analysis Metadata"]
         params = [str(ws.cell(row=i, column=1).value) for i in range(2, ws.max_row + 1)]
-        assert "File A Name" in params
-        assert "File B Name" in params
-        assert "File A Sheet" in params
-        assert "File B Sheet" in params
-        assert "Key Columns (File A)" in params
-        assert "Comparison Rule Count" in params
+        assert "Baseline Dataset" in params
+        assert "Comparison Dataset" in params
+        assert "Baseline Sheet / Tab" in params
+        assert "Comparison Sheet / Tab" in params
+        assert "Match Key Fields (Baseline)" in params
+        assert "Comparison Rules Applied" in params
 
     def test_comparison_rules_tab_has_three_rules(self):
         r = self._full_result()
@@ -398,20 +401,20 @@ class TestWorkbookVerification:
         wb, _ = _wb_from_result(r)
         ws = wb["Delta Counts"]
         categories = [str(ws.cell(row=i, column=1).value) for i in range(2, ws.max_row + 1)]
-        assert any("Only in File A" in c for c in categories)
-        assert any("Changed" in c for c in categories)
+        assert any("Baseline Only Records" in c for c in categories)
+        assert any("Records with Differences" in c for c in categories)
 
-    def test_duplicate_keys_tab_has_data(self):
+    def test_baseline_duplicate_identifiers_tab_has_data(self):
         r = self._full_result()
         wb, _ = _wb_from_result(r)
-        ws = wb["Duplicate Keys File A"]
+        ws = wb["Baseline Duplicate Identifiers"]
         # W4 appears twice → dup rows present
         assert ws.max_row >= 2
 
-    def test_data_quality_issues_tab_has_data(self):
+    def test_data_quality_flags_tab_has_data(self):
         r = self._full_result()
         wb, _ = _wb_from_result(r)
-        ws = wb["Data Quality Issues"]
+        ws = wb["Data Quality Flags"]
         # blank key row present in df_a
         assert ws.max_row >= 2
 
@@ -426,9 +429,8 @@ class TestWorkbookVerification:
         r = self._full_result()
         assert not r.changed.empty
         cols = r.changed.columns.tolist()
-        # Expect columns like "status — File A", "status — File B"
-        assert any("— File A" in c for c in cols)
-        assert any("— File B" in c for c in cols)
+        assert any("— Baseline" in c for c in cols)
+        assert any("— Comparison" in c for c in cols)
 
 
 # ---------------------------------------------------------------------------

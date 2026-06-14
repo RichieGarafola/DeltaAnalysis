@@ -76,24 +76,21 @@ st.markdown(
 # ---------------------------------------------------------------------------
 
 def _csv_bytes(df: pd.DataFrame) -> bytes:
-    """Return a DataFrame serialised as UTF-8 CSV bytes."""
     return df.to_csv(index=False).encode("utf-8")
 
 
 def _show_df(df: pd.DataFrame, key: str = "") -> None:
-    """Display a DataFrame, truncating to PREVIEW_MAX_ROWS and noting if truncated."""
     from src.io_utils import PREVIEW_MAX_ROWS
     display_df, truncated = get_display_frame(df, max_rows=PREVIEW_MAX_ROWS)
     if truncated:
         st.caption(
             f"Showing first {PREVIEW_MAX_ROWS:,} of {len(df):,} rows. "
-            "Download the CSV for the full dataset."
+            "Download the CSV for the complete dataset."
         )
     st.dataframe(display_df, use_container_width=True, hide_index=True, key=key or None)
 
 
 def _csv_download(label: str, df: pd.DataFrame, filename: str) -> None:
-    """Render a CSV download button if the DataFrame is non-empty."""
     if df is not None and not df.empty:
         st.download_button(
             label=f"⬇ Download {label} (CSV)",
@@ -113,8 +110,9 @@ def _csv_download(label: str, df: pd.DataFrame, filename: str) -> None:
 st.markdown('<div class="main-header">🔍 Delta Analysis Tool</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-header">'
-    "Upload two datasets, select your match keys, and generate a full bidirectional comparison. "
-    "Supports government reconciliation, receipt tracking, case audits, and duplicate submission review."
+    "Upload a Baseline Dataset and a Comparison Dataset, define your match keys, and generate "
+    "a full bidirectional reconciliation. Supports government financial reconciliation, "
+    "receipt tracking, contract audits, and duplicate submission review."
     "</div>",
     unsafe_allow_html=True,
 )
@@ -124,23 +122,23 @@ st.divider()
 # Step 1 — File Upload
 # ---------------------------------------------------------------------------
 
-st.markdown('<div class="section-title">Step 1 — Upload Files</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Step 1 — Upload Datasets</div>', unsafe_allow_html=True)
 
 col_a, col_b = st.columns(2)
 
 with col_a:
-    st.markdown("**File A** — Baseline / Prior Period / Source of Record")
+    st.markdown("**Baseline Dataset** — Prior period, source of record, or authoritative extract")
     file_a = st.file_uploader(
-        "Upload File A",
+        "Upload Baseline Dataset",
         type=["csv", "xlsx", "xls"],
         key="upload_a",
         label_visibility="collapsed",
     )
 
 with col_b:
-    st.markdown("**File B** — Comparison / Current Period / Received File")
+    st.markdown("**Comparison Dataset** — Current period, received file, or updated extract")
     file_b = st.file_uploader(
-        "Upload File B",
+        "Upload Comparison Dataset",
         type=["csv", "xlsx", "xls"],
         key="upload_b",
         label_visibility="collapsed",
@@ -157,7 +155,7 @@ if file_a:
         sheets_a = get_excel_sheet_names(file_a)
         if len(sheets_a) > 1:
             sheet_a_selected = st.selectbox(
-                "Sheet (File A)",
+                "Sheet — Baseline Dataset",
                 options=sheets_a,
                 key="sheet_a",
             )
@@ -169,21 +167,23 @@ if file_a:
             st.success(f"✔ {len(df_a):,} rows × {len(df_a.columns)} columns loaded")
             size_status, size_msg = check_file_size(len(df_a))
             if size_status == "warn":
-                st.warning(f"File A: {size_msg}")
+                st.warning(f"Baseline Dataset: {size_msg}")
             elif size_status == "hard":
-                st.error(f"File A: {size_msg}")
-                if not st.checkbox("I understand the risk — proceed anyway (File A)", key="hard_a"):
+                st.error(f"Baseline Dataset: {size_msg}")
+                if not st.checkbox(
+                    "I understand the risk — proceed anyway (Baseline Dataset)", key="hard_a"
+                ):
                     _large_file_blocked = True
     except ValueError as exc:
         with col_a:
-            st.error(f"File A error: {exc}")
+            st.error(f"Baseline Dataset error: {exc}")
 
 if file_b:
     with col_b:
         sheets_b = get_excel_sheet_names(file_b)
         if len(sheets_b) > 1:
             sheet_b_selected = st.selectbox(
-                "Sheet (File B)",
+                "Sheet — Comparison Dataset",
                 options=sheets_b,
                 key="sheet_b",
             )
@@ -195,25 +195,27 @@ if file_b:
             st.success(f"✔ {len(df_b):,} rows × {len(df_b.columns)} columns loaded")
             size_status, size_msg = check_file_size(len(df_b))
             if size_status == "warn":
-                st.warning(f"File B: {size_msg}")
+                st.warning(f"Comparison Dataset: {size_msg}")
             elif size_status == "hard":
-                st.error(f"File B: {size_msg}")
-                if not st.checkbox("I understand the risk — proceed anyway (File B)", key="hard_b"):
+                st.error(f"Comparison Dataset: {size_msg}")
+                if not st.checkbox(
+                    "I understand the risk — proceed anyway (Comparison Dataset)", key="hard_b"
+                ):
                     _large_file_blocked = True
     except ValueError as exc:
         with col_b:
-            st.error(f"File B error: {exc}")
+            st.error(f"Comparison Dataset error: {exc}")
 
 if df_a is not None or df_b is not None:
     with st.expander("Preview uploaded data (first 5 rows)", expanded=False):
         p1, p2 = st.columns(2)
         if df_a is not None:
             with p1:
-                st.markdown("**File A**")
+                st.markdown("**Baseline Dataset**")
                 st.dataframe(get_column_preview(df_a), use_container_width=True, hide_index=True)
         if df_b is not None:
             with p2:
-                st.markdown("**File B**")
+                st.markdown("**Comparison Dataset**")
                 st.dataframe(get_column_preview(df_b), use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------------------------
@@ -222,37 +224,40 @@ if df_a is not None or df_b is not None:
 
 if df_a is not None and df_b is not None:
     st.divider()
-    st.markdown('<div class="section-title">Step 2 — Configure Match Keys</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Step 2 — Configure Match Keys</div>',
+        unsafe_allow_html=True,
+    )
     st.info(
-        "**Key columns** uniquely identify each record — e.g., Case ID, Contract Number. "
-        "Select the matching column(s) from each file. Multiple columns are combined into a "
-        "composite key and matched positionally."
+        "**Match key columns** uniquely identify each record — e.g., Contract Number, Case ID, "
+        "Award ID. Select the corresponding key column(s) from each dataset. "
+        "When using multiple columns, they are combined into a composite key and matched positionally."
     )
 
     k1, k2 = st.columns(2)
     with k1:
         key_cols_a = st.multiselect(
-            "Key column(s) from File A",
+            "Match key column(s) — Baseline Dataset",
             options=df_a.columns.tolist(),
-            help="Column(s) that uniquely identify each record in File A.",
+            help="Column(s) that uniquely identify each record in the Baseline Dataset.",
         )
     with k2:
         key_cols_b = st.multiselect(
-            "Key column(s) from File B",
+            "Match key column(s) — Comparison Dataset",
             options=df_b.columns.tolist(),
-            help="Column(s) that uniquely identify each record in File B.",
+            help="Column(s) that uniquely identify each record in the Comparison Dataset.",
         )
 
     if key_cols_a and key_cols_b:
         if len(key_cols_a) != len(key_cols_b):
             st.warning(
-                f"Key column count mismatch — File A: {len(key_cols_a)}, "
-                f"File B: {len(key_cols_b)}. Counts must match."
+                f"Match key column count mismatch — Baseline: {len(key_cols_a)} column(s), "
+                f"Comparison: {len(key_cols_b)} column(s). Counts must match."
             )
         else:
-            st.markdown("**Key mapping (positional):**")
+            st.markdown("**Key mapping (matched positionally):**")
             st.dataframe(
-                pd.DataFrame({"File A Key": key_cols_a, "File B Key": key_cols_b}),
+                pd.DataFrame({"Baseline Key": key_cols_a, "Comparison Key": key_cols_b}),
                 use_container_width=False,
                 hide_index=True,
             )
@@ -262,10 +267,13 @@ if df_a is not None and df_b is not None:
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Step 3 — Select Fields to Compare for Changes</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Step 3 — Select Fields to Compare</div>',
+        unsafe_allow_html=True,
+    )
     st.info(
-        "**Comparison columns** are non-key fields to diff between files. "
-        "Only matched records are checked. Leave blank to skip field-change analysis."
+        "**Comparison fields** are non-key columns to diff across matched records — e.g., "
+        "obligation amounts, status codes, dates. Leave blank to skip field-level change detection."
     )
 
     common_non_key = [
@@ -276,33 +284,33 @@ if df_a is not None and df_b is not None:
     c1, c2 = st.columns(2)
     with c1:
         compare_cols_a = st.multiselect(
-            "Comparison columns from File A",
+            "Comparison fields — Baseline Dataset",
             options=[c for c in df_a.columns if c not in key_cols_a],
             default=common_non_key,
         )
     with c2:
         compare_cols_b = st.multiselect(
-            "Corresponding columns from File B",
+            "Corresponding fields — Comparison Dataset",
             options=[c for c in df_b.columns if c not in key_cols_b],
             default=[c for c in common_non_key if c in df_b.columns],
         )
 
     if compare_cols_a and compare_cols_b and len(compare_cols_a) != len(compare_cols_b):
         st.warning(
-            f"Comparison column count mismatch — File A: {len(compare_cols_a)}, "
-            f"File B: {len(compare_cols_b)}. Counts must match."
+            f"Comparison field count mismatch — Baseline: {len(compare_cols_a)}, "
+            f"Comparison: {len(compare_cols_b)}. Counts must match."
         )
     elif compare_cols_a and compare_cols_b:
-        st.markdown("**Comparison mapping (positional):**")
+        st.markdown("**Field mapping (matched positionally):**")
         st.dataframe(
-            pd.DataFrame({"File A Column": compare_cols_a, "File B Column": compare_cols_b}),
+            pd.DataFrame({"Baseline Field": compare_cols_a, "Comparison Field": compare_cols_b}),
             use_container_width=False,
             hide_index=True,
         )
 
     # Advanced comparison settings ----------------------------------------
-    # Uses a type-grouped design: one multiselect per type + shared settings.
-    # This scales to 20+ comparison columns without becoming unusable.
+    # Type-grouped design: one multiselect per type + shared settings.
+    # Scales to 20+ comparison fields without widget proliferation.
     comparison_rules: list[dict] | None = None
     if compare_cols_a and compare_cols_b and len(compare_cols_a) == len(compare_cols_b):
         col_pairs = list(zip(compare_cols_a, compare_cols_b))
@@ -310,9 +318,9 @@ if df_a is not None and df_b is not None:
 
         with st.expander("Advanced Comparison Settings (optional)", expanded=False):
             st.info(
-                "By default all fields are compared as **text**. "
-                "Use the selectors below to assign numeric tolerance or date-aware "
-                "comparison to specific fields. Fields not assigned remain text."
+                "By default, all fields are compared as **text**. "
+                "Assign numeric tolerance or date-aware comparison to specific fields below. "
+                "Fields not assigned here will continue to use exact text matching."
             )
 
             adv1, adv2 = st.columns(2)
@@ -320,10 +328,13 @@ if df_a is not None and df_b is not None:
             with adv1:
                 st.markdown("**Numeric fields**")
                 numeric_labels = st.multiselect(
-                    "Fields to compare as numeric",
+                    "Fields to compare as numeric values",
                     options=col_labels,
                     key="adv_numeric",
-                    help="Currency symbols and commas are stripped automatically.",
+                    help=(
+                        "Currency symbols ($, £, €), commas, and parenthesised negatives "
+                        "are stripped automatically before comparison."
+                    ),
                 )
                 numeric_tolerance = st.number_input(
                     "Tolerance (applies to all numeric fields)",
@@ -332,7 +343,10 @@ if df_a is not None and df_b is not None:
                     step=0.01,
                     format="%.4f",
                     key="adv_tol",
-                    help="Maximum allowed difference — 0.00 means exact match.",
+                    help=(
+                        "Maximum allowed absolute difference before flagging a record as changed. "
+                        "Set to 0.00 for exact match. Example: 0.01 ignores rounding differences."
+                    ),
                 )
 
             with adv2:
@@ -341,15 +355,19 @@ if df_a is not None and df_b is not None:
                     "Fields to compare as dates",
                     options=[lbl for lbl in col_labels if lbl not in numeric_labels],
                     key="adv_date",
-                    help="Compares calendar values regardless of input format.",
+                    help=(
+                        "Parses both ISO (YYYY-MM-DD) and US (MM/DD/YYYY) date formats "
+                        "before comparing. Mixed formats in the same column are handled automatically."
+                    ),
                 )
                 date_mode = st.selectbox(
                     "Date precision (applies to all date fields)",
                     options=["date_only", "datetime_precision"],
                     key="adv_date_mode",
                     help=(
-                        "date_only: ignore time — 08:30 and 14:00 on the same day are equal. "
-                        "datetime_precision: include time in the comparison."
+                        "date_only — compare calendar date only; time component is ignored "
+                        "(e.g., 08:30 and 14:00 on the same date are treated as equal). "
+                        "datetime_precision — time is included in the comparison."
                     ),
                 )
 
@@ -384,7 +402,10 @@ if df_a is not None and df_b is not None:
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Step 4 — Run Analysis</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Step 4 — Run Analysis</div>',
+        unsafe_allow_html=True,
+    )
 
     run_ready = bool(
         key_cols_a and key_cols_b
@@ -392,12 +413,14 @@ if df_a is not None and df_b is not None:
         and not _large_file_blocked
     )
     if not run_ready and not _large_file_blocked:
-        st.warning("Select at least one key column from each file (with matching counts) to proceed.")
+        st.warning(
+            "Select at least one match key column from each dataset (with matching counts) to proceed."
+        )
     if _large_file_blocked:
-        st.warning("Confirm the large-file warning above before running analysis.")
+        st.warning("Confirm the large-file warning above before running the analysis.")
 
     if st.button("▶  Run Delta Analysis", type="primary", disabled=not run_ready):
-        with st.spinner("Analysing…"):
+        with st.spinner("Running reconciliation…"):
             try:
                 result: DeltaResult = run_delta(
                     df_a=df_a,
@@ -415,7 +438,7 @@ if df_a is not None and df_b is not None:
                 st.session_state["file_b_name"] = file_b.name
                 st.success("Analysis complete — review the results below.")
             except ValueError as exc:
-                st.error(f"Analysis failed: {exc}")
+                st.error(f"Analysis error: {exc}")
             except Exception as exc:
                 st.error(f"Unexpected error: {exc}")
 
@@ -425,8 +448,8 @@ if df_a is not None and df_b is not None:
 
 if "result" in st.session_state:
     result: DeltaResult = st.session_state["result"]
-    file_a_name: str    = st.session_state.get("file_a_name", "File A")
-    file_b_name: str    = st.session_state.get("file_b_name", "File B")
+    file_a_name: str    = st.session_state.get("file_a_name", "Baseline Dataset")
+    file_b_name: str    = st.session_state.get("file_b_name", "Comparison Dataset")
 
     n_only_a  = len(result.only_in_a)
     n_only_b  = len(result.only_in_b)
@@ -438,42 +461,91 @@ if "result" in st.session_state:
     n_blank_b = len(result.blank_keys_b)
 
     # -----------------------------------------------------------------------
-    # Metric cards
+    # Metric cards — Phase 4
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Results Dashboard</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Results Dashboard</div>',
+        unsafe_allow_html=True,
+    )
 
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("File A — Total",       f"{result.total_a:,}", help="Total records loaded from File A")
-    k2.metric("File B — Total",       f"{result.total_b:,}", help="Total records loaded from File B")
-    k3.metric("Only in File A",       f"{n_only_a:,}",       help="Key present in A but not B")
-    k4.metric("Only in File B",       f"{n_only_b:,}",       help="Key present in B but not A")
-    k5.metric("Matched Records",      f"{n_matched:,}",      help="Common key in both files")
+    k1.metric(
+        "Baseline — Total", f"{result.total_a:,}",
+        help=f"Total records loaded from {file_a_name}",
+    )
+    k2.metric(
+        "Comparison — Total", f"{result.total_b:,}",
+        help=f"Total records loaded from {file_b_name}",
+    )
+    k3.metric(
+        "Baseline Only", f"{n_only_a:,}",
+        help=f"Records whose key appears in {file_a_name} but not in {file_b_name}",
+    )
+    k4.metric(
+        "Comparison Only", f"{n_only_b:,}",
+        help=f"Records whose key appears in {file_b_name} but not in {file_a_name}",
+    )
+    k5.metric(
+        "Matched Records", f"{n_matched:,}",
+        help="Records with a common key present in both datasets",
+    )
 
     k6, k7, k8, k9, k10 = st.columns(5)
-    k6.metric("Records with Changes", f"{n_changed:,}",      help="Matched records where a compared field differs")
-    k7.metric("Duplicate Keys — A",   f"{n_dup_a:,}",        help="Rows sharing a key within File A")
-    k8.metric("Duplicate Keys — B",   f"{n_dup_b:,}",        help="Rows sharing a key within File B")
-    k9.metric("Blank Keys — A",       f"{n_blank_a:,}",      help="Rows with null/blank key in File A")
-    k10.metric("Blank Keys — B",      f"{n_blank_b:,}",      help="Rows with null/blank key in File B")
+    k6.metric(
+        "Records with Differences", f"{n_changed:,}",
+        help="Matched records where at least one compared field differs between datasets",
+    )
+    k7.metric(
+        "Baseline Duplicates", f"{n_dup_a:,}",
+        help=f"Rows sharing a match key with at least one other row in {file_a_name}",
+    )
+    k8.metric(
+        "Comparison Duplicates", f"{n_dup_b:,}",
+        help=f"Rows sharing a match key with at least one other row in {file_b_name}",
+    )
+    k9.metric(
+        "Missing Identifiers (Baseline)", f"{n_blank_a:,}",
+        help=f"Rows with a blank or null match key in {file_a_name} — excluded from reconciliation",
+    )
+    k10.metric(
+        "Missing Identifiers (Comparison)", f"{n_blank_b:,}",
+        help=f"Rows with a blank or null match key in {file_b_name} — excluded from reconciliation",
+    )
 
     # -----------------------------------------------------------------------
-    # Visualizations
+    # Visualizations — Phase 5
+    # Color standards:
+    #   Matched               → green   #2E7D32
+    #   Records w/ Diffs      → amber   #F9A825
+    #   Duplicates            → orange  #E65100
+    #   Baseline Only         → red     #C00000
+    #   Comparison Only       → teal    #00695C
+    #   Missing / DQ          → purple  #6A1B9A
+    #   Totals                → navy    #1F4E79
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Visual Summary</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Visual Summary</div>',
+        unsafe_allow_html=True,
+    )
 
     viz1, viz2, viz3 = st.columns([2, 1.4, 1.6])
 
-    # Chart 1 — Delta category bar chart
+    # Chart 1 — Reconciliation Summary bar chart
     with viz1:
-        st.markdown("**Delta Categories**")
+        st.markdown("**Reconciliation Summary**")
         cat_labels = [
-            "Only in A", "Only in B", "Matched",
-            "Changed", "Dupes A", "Dupes B",
-            "Blank Keys A", "Blank Keys B",
+            "Baseline Only",
+            "Comparison Only",
+            "Matched",
+            "Records w/ Diffs",
+            "Baseline Dupes",
+            "Comparison Dupes",
+            "Missing (Baseline)",
+            "Missing (Comparison)",
         ]
         cat_values = [
             n_only_a, n_only_b, n_matched,
@@ -481,9 +553,14 @@ if "result" in st.session_state:
             n_blank_a, n_blank_b,
         ]
         cat_colors = [
-            "#C00000", "#375623", "#1F4E79",
-            "#7B3F00", "#843C0C", "#843C0C",
-            "#403152", "#403152",
+            "#C00000",  # Baseline Only — red
+            "#00695C",  # Comparison Only — teal
+            "#2E7D32",  # Matched — green
+            "#F9A825",  # Records with Differences — amber
+            "#E65100",  # Baseline Duplicates — orange
+            "#E65100",  # Comparison Duplicates — orange
+            "#6A1B9A",  # Missing Baseline — purple
+            "#6A1B9A",  # Missing Comparison — purple
         ]
         fig_bar = go.Figure(go.Bar(
             x=cat_labels,
@@ -496,7 +573,7 @@ if "result" in st.session_state:
         fig_bar.update_layout(
             margin=dict(l=20, r=20, t=10, b=40),
             height=320,
-            yaxis_title="Records",
+            yaxis_title="Record Count",
             plot_bgcolor="white",
             paper_bgcolor="white",
             yaxis=dict(gridcolor="#EEEEEE"),
@@ -504,14 +581,12 @@ if "result" in st.session_state:
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Chart 2 — Match coverage donut
+    # Chart 2 — Match Coverage donut
     with viz2:
         st.markdown("**Match Coverage**")
-        unmatched_a = n_only_a
-        unmatched_b = n_only_b
-        pie_labels = ["Matched", f"Unmatched (A only)", f"Unmatched (B only)"]
-        pie_values = [n_matched, unmatched_a, unmatched_b]
-        pie_colors = ["#1F4E79", "#C00000", "#375623"]
+        pie_labels = ["Matched", "Baseline Only", "Comparison Only"]
+        pie_values = [n_matched, n_only_a, n_only_b]
+        pie_colors = ["#2E7D32", "#C00000", "#00695C"]
 
         fig_pie = go.Figure(go.Pie(
             labels=pie_labels,
@@ -531,26 +606,26 @@ if "result" in st.session_state:
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Chart 3 — Field-change frequency
+    # Chart 3 — Field-Level Differences frequency
     with viz3:
-        st.markdown("**Field Change Frequency**")
+        st.markdown("**Field-Level Differences**")
         freq_df = build_change_frequency(result)
         if freq_df.empty:
-            st.info("Run with comparison columns selected to see field-change frequency.")
+            st.info("Select comparison fields and re-run to see field-level difference frequency.")
         else:
             fig_freq = go.Figure(go.Bar(
                 x=freq_df["Changes"],
                 y=freq_df["Field"],
                 orientation="h",
-                marker_color="#7B3F00",
+                marker_color="#F9A825",
                 text=freq_df["Changes"],
                 textposition="outside",
-                hovertemplate="%{y}: %{x:,} changes<extra></extra>",
+                hovertemplate="%{y}: %{x:,} difference(s)<extra></extra>",
             ))
             fig_freq.update_layout(
                 margin=dict(l=20, r=40, t=10, b=30),
                 height=320,
-                xaxis_title="# of Changes",
+                xaxis_title="Number of Differences",
                 plot_bgcolor="white",
                 paper_bgcolor="white",
                 xaxis=dict(gridcolor="#EEEEEE"),
@@ -564,17 +639,20 @@ if "result" in st.session_state:
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Detailed Results</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Detailed Results</div>',
+        unsafe_allow_html=True,
+    )
 
     tabs = st.tabs([
         "📋 Summary",
-        f"⬅ Only in A ({n_only_a:,})",
-        f"➡ Only in B ({n_only_b:,})",
+        f"⬅ Baseline Only ({n_only_a:,})",
+        f"➡ Comparison Only ({n_only_b:,})",
         f"✅ Matched ({n_matched:,})",
-        f"⚠ Changed ({n_changed:,})",
-        f"⚡ Dupes A ({n_dup_a:,})",
-        f"⚡ Dupes B ({n_dup_b:,})",
-        "🔴 Data Quality",
+        f"⚠ Differences ({n_changed:,})",
+        f"⚡ Baseline Dupes ({n_dup_a:,})",
+        f"⚡ Comparison Dupes ({n_dup_b:,})",
+        "🔴 Data Quality Flags",
     ])
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -583,35 +661,40 @@ if "result" in st.session_state:
     with tabs[0]:
         st.dataframe(build_summary_df(result), use_container_width=True, hide_index=True)
 
-    # Tab 1 — Only in A
+    # Tab 1 — Baseline Only
     with tabs[1]:
         st.markdown(
-            f"**{n_only_a:,} record(s)** whose key appears in **{file_a_name}** "
-            f"but not in **{file_b_name}**."
+            f"**{n_only_a:,} record(s)** whose match key appears in **{file_a_name}** "
+            f"but has no corresponding entry in **{file_b_name}**. "
+            "These may represent withdrawn entries, pending submissions, or records not yet "
+            "reflected in the comparison source."
         )
         if not result.only_in_a.empty:
             _show_df(result.only_in_a, key="only_a")
         else:
-            st.info("No records in this category.")
-        _csv_download("Only in File A", result.only_in_a, f"only_in_a_{ts}.csv")
+            st.info("No baseline-only records found.")
+        _csv_download("Baseline Only Records", result.only_in_a, f"baseline_only_{ts}.csv")
 
-    # Tab 2 — Only in B
+    # Tab 2 — Comparison Only
     with tabs[2]:
         st.markdown(
-            f"**{n_only_b:,} record(s)** whose key appears in **{file_b_name}** "
-            f"but not in **{file_a_name}**."
+            f"**{n_only_b:,} record(s)** whose match key appears in **{file_b_name}** "
+            f"but has no corresponding entry in **{file_a_name}**. "
+            "These may represent new submissions, late arrivals, or records not yet "
+            "posted to the baseline."
         )
         if not result.only_in_b.empty:
             _show_df(result.only_in_b, key="only_b")
         else:
-            st.info("No records in this category.")
-        _csv_download("Only in File B", result.only_in_b, f"only_in_b_{ts}.csv")
+            st.info("No comparison-only records found.")
+        _csv_download("Comparison Only Records", result.only_in_b, f"comparison_only_{ts}.csv")
 
     # Tab 3 — Matched
     with tabs[3]:
         st.markdown(
-            f"**{n_matched:,} record(s)** with a matching key in both files. "
-            "Columns prefixed **A:** (File A) and **B:** (File B)."
+            f"**{n_matched:,} record(s)** with a matching key present in both datasets. "
+            "Columns prefixed **Baseline:** show values from the baseline dataset; "
+            "columns prefixed **Comparison:** show values from the comparison dataset."
         )
         if not result.matched.empty:
             _show_df(result.matched, key="matched")
@@ -619,74 +702,96 @@ if "result" in st.session_state:
             st.info("No matched records found.")
         _csv_download("Matched Records", result.matched, f"matched_{ts}.csv")
 
-    # Tab 4 — Changed
+    # Tab 4 — Records with Differences
     with tabs[4]:
         if not result.compare_cols_a:
             st.info(
-                "No comparison columns were selected. "
-                "Re-run with comparison columns to see field-level changes."
+                "No comparison fields were selected. "
+                "Re-run the analysis with comparison fields configured to see field-level differences."
             )
         elif result.changed.empty:
-            st.success("No field-level changes detected among matched records.")
+            st.success(
+                "No field-level differences detected among matched records. "
+                "All compared fields are identical between datasets."
+            )
         else:
             st.markdown(
-                f"**{n_changed:,} matched record(s)** where at least one compared field "
-                "differs. Each changed field shows its **File A** and **File B** values."
+                f"**{n_changed:,} matched record(s)** where at least one compared field differs. "
+                "Each row shows the **Baseline** and **Comparison** values for every changed field."
             )
             _show_df(result.changed, key="changed")
-        _csv_download("Changed Records", result.changed, f"changed_{ts}.csv")
+        _csv_download("Records with Differences", result.changed, f"records_with_differences_{ts}.csv")
         if result.compare_parse_issues is not None and not result.compare_parse_issues.empty:
             with st.expander(
-                f"⚠ {len(result.compare_parse_issues)} parse issue(s) detected during comparison",
+                f"⚠ {len(result.compare_parse_issues)} parse warning(s) — values that could not "
+                "be interpreted as the configured type",
                 expanded=False,
             ):
                 st.dataframe(result.compare_parse_issues, use_container_width=True, hide_index=True)
 
-    # Tab 5 — Duplicates A
+    # Tab 5 — Baseline Duplicates
     with tabs[5]:
         st.markdown(
-            f"**{n_dup_a:,} row(s)** sharing a key with at least one other row "
-            f"in **{file_a_name}**."
+            f"**{n_dup_a:,} row(s)** in **{file_a_name}** that share a match key with at least "
+            "one other row in the same dataset. Only the first occurrence of each duplicate key "
+            "was used in the matching process. Duplicate submissions should be resolved at the "
+            "source system before official reporting."
         )
         if not result.duplicates_a.empty:
             _show_df(result.duplicates_a, key="dup_a")
         else:
-            st.success("No duplicate keys in File A.")
-        _csv_download("Duplicate Keys File A", result.duplicates_a, f"dupes_a_{ts}.csv")
+            st.success("No duplicate identifiers detected in the Baseline Dataset.")
+        _csv_download(
+            "Baseline Duplicate Identifiers", result.duplicates_a, f"baseline_duplicates_{ts}.csv"
+        )
 
-    # Tab 6 — Duplicates B
+    # Tab 6 — Comparison Duplicates
     with tabs[6]:
         st.markdown(
-            f"**{n_dup_b:,} row(s)** sharing a key with at least one other row "
-            f"in **{file_b_name}**."
+            f"**{n_dup_b:,} row(s)** in **{file_b_name}** that share a match key with at least "
+            "one other row in the same dataset. Only the first occurrence of each duplicate key "
+            "was used in the matching process. Duplicate submissions should be resolved at the "
+            "source system before official reporting."
         )
         if not result.duplicates_b.empty:
             _show_df(result.duplicates_b, key="dup_b")
         else:
-            st.success("No duplicate keys in File B.")
-        _csv_download("Duplicate Keys File B", result.duplicates_b, f"dupes_b_{ts}.csv")
+            st.success("No duplicate identifiers detected in the Comparison Dataset.")
+        _csv_download(
+            "Comparison Duplicate Identifiers", result.duplicates_b, f"comparison_duplicates_{ts}.csv"
+        )
 
-    # Tab 7 — Data Quality
+    # Tab 7 — Data Quality Flags
     with tabs[7]:
-        st.markdown("**Rows excluded from matching due to blank or null key values.**")
+        st.markdown(
+            "**Rows excluded from reconciliation** due to a blank or null match key value. "
+            "These records cannot be matched and are flagged here for source-system correction."
+        )
         dq_rows: list[dict] = []
         for _, row in result.blank_keys_a.iterrows():
-            dq_rows.append({"Source File": file_a_name, "Issue": "Blank / Null Key", **row.to_dict()})
+            dq_rows.append({"Dataset": "Baseline", "Filename": file_a_name,
+                             "Flag": "Missing Identifier", **row.to_dict()})
         for _, row in result.blank_keys_b.iterrows():
-            dq_rows.append({"Source File": file_b_name, "Issue": "Blank / Null Key", **row.to_dict()})
-        dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Source File", "Issue"])
+            dq_rows.append({"Dataset": "Comparison", "Filename": file_b_name,
+                             "Flag": "Missing Identifier", **row.to_dict()})
+        dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(
+            columns=["Dataset", "Filename", "Flag"]
+        )
         if not dq_df.empty:
             _show_df(dq_df, key="dq")
         else:
-            st.success("No data quality issues detected.")
-        _csv_download("Data Quality Issues", dq_df, f"data_quality_{ts}.csv")
+            st.success("No data quality flags detected. All records carry valid match key values.")
+        _csv_download("Data Quality Flags", dq_df, f"data_quality_flags_{ts}.csv")
 
     # -----------------------------------------------------------------------
     # Export
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.markdown('<div class="section-title">Export Results</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Export Results</div>',
+        unsafe_allow_html=True,
+    )
 
     exp_col, info_col = st.columns([1, 3])
 
@@ -706,15 +811,16 @@ if "result" in st.session_state:
         st.markdown(
             """
             The Excel workbook contains **11 tabs**:
-            - **Executive Summary** — auto-generated plain-English briefing text
-            - **Analysis Metadata** — file names, sheets, row counts, key columns, timestamp
-            - **Comparison Rules** — per-column comparison type, tolerance, date mode
-            - **Delta Counts** — flat count table for pivot/charting
-            - **Only in File A / B** — unmatched records
-            - **Matched Records** — side-by-side view
-            - **Changed Records** — before/after for each changed field
-            - **Duplicate Keys A / B** — non-unique key rows
-            - **Data Quality Issues** — blank/null key rows
+            - **Executive Summary** — auto-generated plain-English briefing narrative
+            - **Analysis Metadata** — dataset names, sheets, record counts, key columns, timestamp
+            - **Comparison Rules** — per-field comparison type, tolerance, and date precision settings
+            - **Delta Counts** — flat count table suitable for pivot tables and downstream reporting
+            - **Baseline Only Records** — records present in the baseline but absent from comparison
+            - **Comparison Only Records** — records present in the comparison but absent from baseline
+            - **Matched Records** — side-by-side view of all matched records
+            - **Records with Differences** — before/after values for every changed field
+            - **Baseline / Comparison Duplicate Identifiers** — rows with non-unique match keys
+            - **Data Quality Flags** — rows excluded due to blank or null match key values
             """
         )
 

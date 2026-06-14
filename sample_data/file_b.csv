@@ -1,5 +1,5 @@
 RecordID,Name,Status,Amount,ReviewedBy
-R001,Alpha Corporation,Approved,15000,J. Smith
-R002,Bravo Logistics,Approved,9000,M. Jones
-R005,Echo Services,Pending,11200,R. Davis
-R004,Delta Defense,Approved,4750,J. Smith
+R001,Northgate Defense Systems LLC,Approved,15000.00,CPT Martinez
+R002,Meridian Logistics Group Inc,Approved,9000.00,MAJ Williams
+R005,Vanguard Sustainment Corp,Pending,11200.00,R. Davis
+R004,Ironridge Maintenance Corp,Approved,4750.00,CPT Martinez
