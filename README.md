@@ -31,7 +31,7 @@ Results are shown in an interactive dashboard with:
 - **10 KPI cards** for at-a-glance counts (totals, matched, changed, duplicates, blanks)
 - **3 Plotly charts**: delta category bar chart, match coverage donut, field-change frequency
 - **8 tabbed result tables** with per-category CSV downloads
-- **12-tab Excel workbook** with an auto-generated Executive Summary and metadata tabs
+- **11-tab Excel workbook** with an auto-generated Executive Summary and metadata tabs
 
 ---
 
@@ -100,11 +100,10 @@ pytest tests/ --cov=src --cov-report=term-missing
 4. Select comparison column(s) to diff
 5. Click **Run Delta Analysis**
 6. (Optional) Expand **Advanced Comparison Settings** to configure numeric tolerance or date-aware comparison per column
-7. Use the **Download Excel Report** button for the full 12-tab workbook
+7. Use the **Download Excel Report** button for the full 11-tab workbook
 8. Use the per-tab **Download CSV** buttons for individual category exports
 
 The Excel workbook tabs:
-- **Summary** — all counts and percentages
 - **Executive Summary** — auto-generated plain-English briefing text
 - **Analysis Metadata** — file names, sheets used, row counts, key columns, timestamp
 - **Comparison Rules** — per-column comparison type, tolerance, and date mode

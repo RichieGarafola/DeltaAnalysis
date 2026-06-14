@@ -705,8 +705,7 @@ if "result" in st.session_state:
     with info_col:
         st.markdown(
             """
-            The Excel workbook contains **12 tabs**:
-            - **Summary** — counts and percentages
+            The Excel workbook contains **11 tabs**:
             - **Executive Summary** — auto-generated plain-English briefing text
             - **Analysis Metadata** — file names, sheets, row counts, key columns, timestamp
             - **Comparison Rules** — per-column comparison type, tolerance, date mode

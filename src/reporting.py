@@ -40,7 +40,6 @@ COLORS = {
 }
 
 _HEADER_COLORS = {
-    "Summary":               COLORS["navy"],
     "Executive Summary":     COLORS["slate"],
     "Analysis Metadata":     COLORS["slate"],
     "Comparison Rules":      COLORS["slate"],
@@ -147,7 +146,6 @@ def export_to_excel(
 
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        summary_df.to_excel(writer,             sheet_name="Summary",               index=False)
         _write_narrative(narrative, writer)
         metadata_df.to_excel(writer,            sheet_name="Analysis Metadata",     index=False)
         rules_df.to_excel(writer,               sheet_name="Comparison Rules",      index=False)

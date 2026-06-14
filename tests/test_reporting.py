@@ -145,6 +145,8 @@ REQUIRED_SHEETS = [
     "Data Quality Issues",
 ]
 
+REMOVED_SHEETS = ["Summary"]
+
 
 class TestExcelSheetNames:
     def _load_wb(self, result=None, a="File A", b="File B"):
@@ -157,6 +159,15 @@ class TestExcelSheetNames:
         wb = self._load_wb()
         for sheet in REQUIRED_SHEETS:
             assert sheet in wb.sheetnames, f"Missing required sheet: '{sheet}'"
+
+    def test_legacy_summary_sheet_removed(self):
+        wb = self._load_wb()
+        for sheet in REMOVED_SHEETS:
+            assert sheet not in wb.sheetnames, f"Legacy sheet '{sheet}' should have been removed"
+
+    def test_exactly_eleven_sheets(self):
+        wb = self._load_wb()
+        assert len(wb.sheetnames) == 11, f"Expected 11 sheets, got {len(wb.sheetnames)}: {wb.sheetnames}"
 
     def test_executive_summary_has_data(self):
         wb = self._load_wb()
