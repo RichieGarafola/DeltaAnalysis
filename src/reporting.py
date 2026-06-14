@@ -110,6 +110,8 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
             n_changed = (result.changed[a_col] != result.changed[b_col]).sum()
             rows.append({"Field": col, "Changes": int(n_changed)})
 
+    if not rows:
+        return pd.DataFrame(columns=["Field", "Changes"])
     df = pd.DataFrame(rows).sort_values("Changes", ascending=False).reset_index(drop=True)
     return df
 
