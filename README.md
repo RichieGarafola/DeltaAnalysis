@@ -31,7 +31,7 @@ Results are shown in an interactive dashboard with:
 - **10 KPI cards** for at-a-glance counts (totals, matched, changed, duplicates, blanks)
 - **3 Plotly charts**: delta category bar chart, match coverage donut, field-change frequency
 - **8 tabbed result tables** with per-category CSV downloads
-- **10-tab Excel workbook** with an auto-generated Executive Narrative
+- **12-tab Excel workbook** with an auto-generated Executive Summary and metadata tabs
 
 ---
 
@@ -82,7 +82,7 @@ Opens at `http://localhost:8501`. No configuration required.
 pytest tests/ -v
 ```
 
-Expected output: **47 tests passing** across two test modules.
+Expected output: **103 tests passing** across four test modules.
 
 With coverage:
 
@@ -99,12 +99,15 @@ pytest tests/ --cov=src --cov-report=term-missing
 3. Select key column(s) from each file
 4. Select comparison column(s) to diff
 5. Click **Run Delta Analysis**
-6. Use the **Download Excel Report** button for the full 10-tab workbook
-7. Use the per-tab **Download CSV** buttons for individual category exports
+6. (Optional) Expand **Advanced Comparison Settings** to configure numeric tolerance or date-aware comparison per column
+7. Use the **Download Excel Report** button for the full 12-tab workbook
+8. Use the per-tab **Download CSV** buttons for individual category exports
 
 The Excel workbook tabs:
 - **Summary** — all counts and percentages
-- **Executive Narrative** — auto-generated plain-English briefing text
+- **Executive Summary** — auto-generated plain-English briefing text
+- **Analysis Metadata** — file names, sheets used, row counts, key columns, timestamp
+- **Comparison Rules** — per-column comparison type, tolerance, and date mode
 - **Delta Counts** — flat table suitable for pivot tables
 - **Only in File A / B** — unmatched records
 - **Matched Records** — side-by-side A + B view
@@ -170,13 +173,16 @@ DeltaAnalysis/
 ├── src/
 │   ├── __init__.py
 │   ├── normalization.py        # Key cleaning: trim, fix "1234.0", handle nulls
-│   ├── io_utils.py             # File upload parsing with user-friendly errors
+│   ├── io_utils.py             # File upload parsing, sheet names, size guards
+│   ├── comparison.py           # Type-aware field comparison (numeric, date, text)
 │   ├── delta_engine.py         # Core comparison → DeltaResult dataclass
-│   └── reporting.py            # 10-tab Excel export with Executive Narrative
+│   └── reporting.py            # 12-tab Excel export with Executive Summary
 ├── tests/
 │   ├── __init__.py
 │   ├── test_normalization.py   # 21 unit tests
-│   └── test_delta_engine.py    # 26 unit tests
+│   ├── test_delta_engine.py    # 26 unit tests
+│   ├── test_comparison.py      # 32 unit tests (numeric, date, field comparison)
+│   └── test_io_utils.py        # 24 unit tests (sheets, size checks, display)
 └── sample_data/
     ├── file_a.csv              # Minimal demo — one of each delta category
     ├── file_b.csv              # Minimal demo — comparison side
@@ -234,14 +240,20 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 ## Current Limitations
 
-- **Single-sheet Excel only.** Multi-sheet Excel workbooks are read from Sheet 1 only.
-- **String comparison only.** All values are compared as normalized strings; numeric tolerance, rounding, and threshold-based comparisons are not yet supported.
-- **No date-aware diffing.** Date fields that differ only in format, such as `01/15/2024` vs `2024-01-15`, may be flagged as changes.
-- **Memory-bound processing.** Very large files, especially 500k+ rows, may be slow or exhaust browser/session memory. For large datasets, pre-filter, sample, or chunk before uploading.
+- **Memory-bound processing.** Very large files, especially 500k+ rows, may be slow or exhaust browser/session memory. The app warns at 100k rows and requires confirmation at 500k rows.
 - **No authentication.** The Streamlit app has no login wall. Do not deploy to a public URL with sensitive government data unless appropriate security controls are in place.
 - **No persistent saved configurations.** Key selections and comparison mappings must be selected each session.
 - **No row-level analyst annotations yet.**
 - **No scheduled/automated runs yet.**
+
+### Implemented in v1.1
+
+- ✅ Multi-sheet Excel support with sheet selector (shown only when file has multiple sheets)
+- ✅ Numeric tolerance comparison — strip `$`, `£`, `€`, commas; handle `(1,000)` negatives; configurable tolerance per column
+- ✅ Date-aware comparison — `01/15/2024` and `2024-01-15` are recognised as the same date
+- ✅ Large-file safety — warning banner at 100k rows, confirmation gate at 500k rows, table previews capped at 1,000 rows
+- ✅ Analysis Metadata and Comparison Rules tabs in the Excel export
+- ✅ Parse-issue log surfaced in the Changed Records tab when numeric/date parsing encounters unexpected values
 
 ---
 
@@ -262,16 +274,12 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 ## Roadmap
 
 ### Near-Term
-- [ ] Multi-sheet Excel support with sheet selector
-- [ ] Date normalization options
-- [ ] Numeric tolerance option for amount fields
 - [ ] Saved configuration profiles
 - [ ] Column rename/mapping UI
-- [ ] Improved large-file handling
 - [ ] More robust data quality checks
+- [ ] PDF report export for leadership briefings
 
 ### Medium-Term
-- [ ] PDF report export for leadership briefings
 - [ ] Scheduled or automated comparison runs via CLI
 - [ ] Row-level audit log with analyst annotations
 - [ ] Reconciliation modes for DFAS, M&RA Package Tracking, Veteran Case Tracking, and Generic Delta Analysis

@@ -7,7 +7,7 @@ difference needed for audit-grade reporting.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 import pandas as pd
@@ -40,6 +40,12 @@ class DeltaResult:
     total_a: int                   # Original row count before any filtering
     total_b: int
 
+    # v1.1 additions — optional, with defaults for backward compatibility
+    comparison_rules: List[dict] = field(default_factory=list)
+    sheet_a: Optional[str] = None
+    sheet_b: Optional[str] = None
+    compare_parse_issues: Optional[pd.DataFrame] = None
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -52,18 +58,27 @@ def run_delta(
     key_cols_b: List[str],
     compare_cols_a: Optional[List[str]] = None,
     compare_cols_b: Optional[List[str]] = None,
+    comparison_rules: Optional[List[dict]] = None,
+    sheet_a: Optional[str] = None,
+    sheet_b: Optional[str] = None,
 ) -> DeltaResult:
     """
     Run a full bidirectional delta analysis.
 
     Parameters
     ----------
-    df_a, df_b         : Source DataFrames (read as strings recommended)
-    key_cols_a/b       : Columns that uniquely identify a record in each file.
-                         Matched positionally — first col in A pairs with
-                         first col in B, etc.
-    compare_cols_a/b   : Non-key columns to diff for changes.
-                         Must be the same length; compared positionally.
+    df_a, df_b           : Source DataFrames (read as strings recommended)
+    key_cols_a/b         : Columns that uniquely identify a record in each file.
+                           Matched positionally — first col in A pairs with
+                           first col in B, etc.
+    compare_cols_a/b     : Non-key columns to diff for changes.
+                           Must be the same length; compared positionally.
+    comparison_rules     : List of rule dicts controlling per-column comparison
+                           type, tolerance, and date handling.  When None,
+                           defaults to text comparison for all columns (same
+                           behaviour as v1.0).
+    sheet_a, sheet_b     : Excel sheet names used when reading each file;
+                           stored on the result for reporting purposes only.
 
     Returns
     -------
@@ -93,6 +108,9 @@ def run_delta(
 
     total_a = len(df_a)
     total_b = len(df_b)
+
+    # Build or normalise comparison rules
+    rules = _normalise_rules(comparison_rules, compare_cols_a, compare_cols_b)
 
     # --- Build working copies with composite keys --------------------------
     a = df_a.copy().reset_index(drop=True)
@@ -160,10 +178,12 @@ def run_delta(
     )
 
     # --- Changed records ---------------------------------------------------
-    changed = _find_changed(
+    changed, parse_issues = _find_changed(
         matched_a, matched_b, common_keys,
-        key_cols_a, compare_cols_a, compare_cols_b,
+        key_cols_a, rules,
     )
+
+    parse_issues_df = pd.DataFrame(parse_issues) if parse_issues else None
 
     return DeltaResult(
         only_in_a=only_a,
@@ -180,6 +200,10 @@ def run_delta(
         compare_cols_b=compare_cols_b,
         total_a=total_a,
         total_b=total_b,
+        comparison_rules=rules,
+        sheet_a=sheet_a,
+        sheet_b=sheet_b,
+        compare_parse_issues=parse_issues_df,
     )
 
 
@@ -187,42 +211,92 @@ def run_delta(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _normalise_rules(
+    comparison_rules: Optional[List[dict]],
+    compare_cols_a: List[str],
+    compare_cols_b: List[str],
+) -> List[dict]:
+    """
+    Return a validated rule list.
+
+    If comparison_rules is None or empty, build a default text rule for each
+    column pair — preserving v1.0 behaviour unchanged.
+    """
+    if comparison_rules:
+        return comparison_rules
+    return _build_default_rules(compare_cols_a, compare_cols_b)
+
+
+def _build_default_rules(
+    cols_a: List[str],
+    cols_b: List[str],
+) -> List[dict]:
+    """Build text-type comparison rules for every column pair."""
+    return [
+        {"column_a": ca, "column_b": cb, "type": "text", "tolerance": None, "date_mode": None}
+        for ca, cb in zip(cols_a, cols_b)
+    ]
+
+
 def _find_changed(
     matched_a: pd.DataFrame,
     matched_b: pd.DataFrame,
     common_keys: set,
     key_cols_a: List[str],
-    compare_cols_a: List[str],
-    compare_cols_b: List[str],
-) -> pd.DataFrame:
-    """Return rows where any compared field differs between A and B."""
-    if not compare_cols_a:
-        return pd.DataFrame()
+    rules: List[dict],
+):
+    """
+    Return (changed_df, parse_issue_list) where any compared field differs.
+
+    Uses comparison_rules for type-aware comparison; falls back to text when
+    rules is empty (no comparison columns selected).
+    """
+    from src.comparison import compare_field_values
+
+    if not rules:
+        return pd.DataFrame(), []
 
     rows = []
+    parse_issues = []
+
     for key in sorted(common_keys):
         row_a = matched_a.loc[key]
         row_b = matched_b.loc[key]
 
         diffs = {}
-        for col_a, col_b in zip(compare_cols_a, compare_cols_b):
-            val_a = normalize_key_value(row_a.get(col_a, ""))
-            val_b = normalize_key_value(row_b.get(col_b, ""))
-            if val_a != val_b:
-                diffs[col_a] = (val_a, val_b)
+        for rule in rules:
+            col_a = rule["column_a"]
+            col_b = rule["column_b"]
+
+            val_a = row_a.get(col_a, "")
+            val_b = row_b.get(col_b, "")
+
+            is_equal, str_a, str_b, issue = compare_field_values(val_a, val_b, rule)
+
+            if issue:
+                parse_issues.append({
+                    "key": key,
+                    "column_a": col_a,
+                    "column_b": col_b,
+                    "value_a": val_a,
+                    "value_b": val_b,
+                    "issue": issue,
+                })
+
+            if not is_equal:
+                diffs[col_a] = (str_a, str_b)
 
         if diffs:
             record: dict = {}
-            # Show the key field(s) so the user knows which record changed
             for kc in key_cols_a:
                 record[f"Key: {kc}"] = row_a.get(kc, "")
-            # Show before/after for each changed field
             for col, (before, after) in diffs.items():
                 record[f"{col} — File A"] = before
                 record[f"{col} — File B"] = after
             rows.append(record)
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    changed_df = pd.DataFrame(rows) if rows else pd.DataFrame()
+    return changed_df, parse_issues
 
 
 def _validate_columns(df: pd.DataFrame, cols: List[str], label: str) -> None:

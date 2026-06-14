@@ -15,7 +15,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.delta_engine import DeltaResult, run_delta
-from src.io_utils import get_column_preview, read_uploaded_file
+from src.io_utils import (
+    check_file_size,
+    get_column_preview,
+    get_display_frame,
+    get_excel_sheet_names,
+    read_uploaded_file,
+)
 from src.reporting import build_change_frequency, build_summary_df, export_to_excel
 
 # ---------------------------------------------------------------------------
@@ -74,6 +80,18 @@ def _csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
+def _show_df(df: pd.DataFrame, key: str = "") -> None:
+    """Display a DataFrame, truncating to PREVIEW_MAX_ROWS and noting if truncated."""
+    from src.io_utils import PREVIEW_MAX_ROWS
+    display_df, truncated = get_display_frame(df, max_rows=PREVIEW_MAX_ROWS)
+    if truncated:
+        st.caption(
+            f"Showing first {PREVIEW_MAX_ROWS:,} of {len(df):,} rows. "
+            "Download the CSV for the full dataset."
+        )
+    st.dataframe(display_df, use_container_width=True, hide_index=True, key=key or None)
+
+
 def _csv_download(label: str, df: pd.DataFrame, filename: str) -> None:
     """Render a CSV download button if the DataFrame is non-empty."""
     if df is not None and not df.empty:
@@ -130,21 +148,58 @@ with col_b:
 
 df_a: pd.DataFrame | None = None
 df_b: pd.DataFrame | None = None
+sheet_a_selected: str | None = None
+sheet_b_selected: str | None = None
+_large_file_blocked = False
 
 if file_a:
+    with col_a:
+        sheets_a = get_excel_sheet_names(file_a)
+        if len(sheets_a) > 1:
+            sheet_a_selected = st.selectbox(
+                "Sheet (File A)",
+                options=sheets_a,
+                key="sheet_a",
+            )
+        elif sheets_a:
+            sheet_a_selected = sheets_a[0]
     try:
-        df_a = read_uploaded_file(file_a)
+        df_a = read_uploaded_file(file_a, sheet_name=sheet_a_selected)
         with col_a:
             st.success(f"✔ {len(df_a):,} rows × {len(df_a.columns)} columns loaded")
+            size_status, size_msg = check_file_size(len(df_a))
+            if size_status == "warn":
+                st.warning(f"File A: {size_msg}")
+            elif size_status == "hard":
+                st.error(f"File A: {size_msg}")
+                if not st.checkbox("I understand the risk — proceed anyway (File A)", key="hard_a"):
+                    _large_file_blocked = True
     except ValueError as exc:
         with col_a:
             st.error(f"File A error: {exc}")
 
 if file_b:
+    with col_b:
+        sheets_b = get_excel_sheet_names(file_b)
+        if len(sheets_b) > 1:
+            sheet_b_selected = st.selectbox(
+                "Sheet (File B)",
+                options=sheets_b,
+                key="sheet_b",
+            )
+        elif sheets_b:
+            sheet_b_selected = sheets_b[0]
     try:
-        df_b = read_uploaded_file(file_b)
+        df_b = read_uploaded_file(file_b, sheet_name=sheet_b_selected)
         with col_b:
             st.success(f"✔ {len(df_b):,} rows × {len(df_b.columns)} columns loaded")
+            size_status, size_msg = check_file_size(len(df_b))
+            if size_status == "warn":
+                st.warning(f"File B: {size_msg}")
+            elif size_status == "hard":
+                st.error(f"File B: {size_msg}")
+                if not st.checkbox("I understand the risk — proceed anyway (File B)", key="hard_b"):
+                    _large_file_blocked = True
     except ValueError as exc:
         with col_b:
             st.error(f"File B error: {exc}")
@@ -245,6 +300,56 @@ if df_a is not None and df_b is not None:
             hide_index=True,
         )
 
+    # Advanced comparison settings ----------------------------------------
+    comparison_rules: list[dict] | None = None
+    if compare_cols_a and compare_cols_b and len(compare_cols_a) == len(compare_cols_b):
+        with st.expander("Advanced Comparison Settings (optional)", expanded=False):
+            st.info(
+                "By default all fields are compared as text. "
+                "Select **numeric** to use a tolerance for rounding/currency differences, "
+                "or **date** to compare dates by calendar value regardless of format."
+            )
+            built_rules: list[dict] = []
+            for ca, cb in zip(compare_cols_a, compare_cols_b):
+                col_label = ca if ca == cb else f"{ca} / {cb}"
+                r1, r2, r3 = st.columns([2, 1.5, 1.5])
+                with r1:
+                    ctype = st.selectbox(
+                        f"Type for **{col_label}**",
+                        options=["text", "numeric", "date"],
+                        key=f"ctype_{ca}",
+                    )
+                tolerance = None
+                date_mode = None
+                with r2:
+                    if ctype == "numeric":
+                        tolerance = st.number_input(
+                            "Tolerance",
+                            min_value=0.0,
+                            value=0.0,
+                            step=0.01,
+                            format="%.4f",
+                            key=f"tol_{ca}",
+                            help="Maximum allowed difference — 0 means exact match.",
+                        )
+                with r3:
+                    if ctype == "date":
+                        date_mode = st.selectbox(
+                            "Date mode",
+                            options=["auto", "us", "iso"],
+                            key=f"dmode_{ca}",
+                            help="auto: try US format first; us: MM/DD/YYYY; iso: YYYY-MM-DD.",
+                        )
+                built_rules.append({
+                    "column_a":  ca,
+                    "column_b":  cb,
+                    "type":      ctype,
+                    "tolerance": tolerance,
+                    "date_mode": date_mode,
+                })
+            if any(r["type"] != "text" for r in built_rules):
+                comparison_rules = built_rules
+
     # -----------------------------------------------------------------------
     # Step 4 — Run
     # -----------------------------------------------------------------------
@@ -252,9 +357,15 @@ if df_a is not None and df_b is not None:
     st.divider()
     st.markdown('<div class="section-title">Step 4 — Run Analysis</div>', unsafe_allow_html=True)
 
-    run_ready = bool(key_cols_a and key_cols_b and len(key_cols_a) == len(key_cols_b))
-    if not run_ready:
+    run_ready = bool(
+        key_cols_a and key_cols_b
+        and len(key_cols_a) == len(key_cols_b)
+        and not _large_file_blocked
+    )
+    if not run_ready and not _large_file_blocked:
         st.warning("Select at least one key column from each file (with matching counts) to proceed.")
+    if _large_file_blocked:
+        st.warning("Confirm the large-file warning above before running analysis.")
 
     if st.button("▶  Run Delta Analysis", type="primary", disabled=not run_ready):
         with st.spinner("Analysing…"):
@@ -266,6 +377,9 @@ if df_a is not None and df_b is not None:
                     key_cols_b=key_cols_b,
                     compare_cols_a=compare_cols_a or None,
                     compare_cols_b=compare_cols_b or None,
+                    comparison_rules=comparison_rules,
+                    sheet_a=sheet_a_selected,
+                    sheet_b=sheet_b_selected,
                 )
                 st.session_state["result"]      = result
                 st.session_state["file_a_name"] = file_a.name
@@ -447,7 +561,7 @@ if "result" in st.session_state:
             f"but not in **{file_b_name}**."
         )
         if not result.only_in_a.empty:
-            st.dataframe(result.only_in_a, use_container_width=True, hide_index=True)
+            _show_df(result.only_in_a, key="only_a")
         else:
             st.info("No records in this category.")
         _csv_download("Only in File A", result.only_in_a, f"only_in_a_{ts}.csv")
@@ -459,7 +573,7 @@ if "result" in st.session_state:
             f"but not in **{file_a_name}**."
         )
         if not result.only_in_b.empty:
-            st.dataframe(result.only_in_b, use_container_width=True, hide_index=True)
+            _show_df(result.only_in_b, key="only_b")
         else:
             st.info("No records in this category.")
         _csv_download("Only in File B", result.only_in_b, f"only_in_b_{ts}.csv")
@@ -471,7 +585,7 @@ if "result" in st.session_state:
             "Columns prefixed **A:** (File A) and **B:** (File B)."
         )
         if not result.matched.empty:
-            st.dataframe(result.matched, use_container_width=True, hide_index=True)
+            _show_df(result.matched, key="matched")
         else:
             st.info("No matched records found.")
         _csv_download("Matched Records", result.matched, f"matched_{ts}.csv")
@@ -490,8 +604,14 @@ if "result" in st.session_state:
                 f"**{n_changed:,} matched record(s)** where at least one compared field "
                 "differs. Each changed field shows its **File A** and **File B** values."
             )
-            st.dataframe(result.changed, use_container_width=True, hide_index=True)
+            _show_df(result.changed, key="changed")
         _csv_download("Changed Records", result.changed, f"changed_{ts}.csv")
+        if result.compare_parse_issues is not None and not result.compare_parse_issues.empty:
+            with st.expander(
+                f"⚠ {len(result.compare_parse_issues)} parse issue(s) detected during comparison",
+                expanded=False,
+            ):
+                st.dataframe(result.compare_parse_issues, use_container_width=True, hide_index=True)
 
     # Tab 5 — Duplicates A
     with tabs[5]:
@@ -500,7 +620,7 @@ if "result" in st.session_state:
             f"in **{file_a_name}**."
         )
         if not result.duplicates_a.empty:
-            st.dataframe(result.duplicates_a, use_container_width=True, hide_index=True)
+            _show_df(result.duplicates_a, key="dup_a")
         else:
             st.success("No duplicate keys in File A.")
         _csv_download("Duplicate Keys File A", result.duplicates_a, f"dupes_a_{ts}.csv")
@@ -512,7 +632,7 @@ if "result" in st.session_state:
             f"in **{file_b_name}**."
         )
         if not result.duplicates_b.empty:
-            st.dataframe(result.duplicates_b, use_container_width=True, hide_index=True)
+            _show_df(result.duplicates_b, key="dup_b")
         else:
             st.success("No duplicate keys in File B.")
         _csv_download("Duplicate Keys File B", result.duplicates_b, f"dupes_b_{ts}.csv")
@@ -527,7 +647,7 @@ if "result" in st.session_state:
             dq_rows.append({"Source File": file_b_name, "Issue": "Blank / Null Key", **row.to_dict()})
         dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Source File", "Issue"])
         if not dq_df.empty:
-            st.dataframe(dq_df, use_container_width=True, hide_index=True)
+            _show_df(dq_df, key="dq")
         else:
             st.success("No data quality issues detected.")
         _csv_download("Data Quality Issues", dq_df, f"data_quality_{ts}.csv")
@@ -556,9 +676,11 @@ if "result" in st.session_state:
     with info_col:
         st.markdown(
             """
-            The Excel workbook contains **10 tabs**:
+            The Excel workbook contains **12 tabs**:
             - **Summary** — counts and percentages
-            - **Executive Narrative** — auto-generated plain-English briefing text
+            - **Executive Summary** — auto-generated plain-English briefing text
+            - **Analysis Metadata** — file names, sheets, row counts, key columns, timestamp
+            - **Comparison Rules** — per-column comparison type, tolerance, date mode
             - **Delta Counts** — flat count table for pivot/charting
             - **Only in File A / B** — unmatched records
             - **Matched Records** — side-by-side view

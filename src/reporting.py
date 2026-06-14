@@ -41,7 +41,9 @@ COLORS = {
 
 _HEADER_COLORS = {
     "Summary":               COLORS["navy"],
-    "Executive Narrative":   COLORS["slate"],
+    "Executive Summary":     COLORS["slate"],
+    "Analysis Metadata":     COLORS["slate"],
+    "Comparison Rules":      COLORS["slate"],
     "Delta Counts":          COLORS["navy"],
     "Only in File A":        COLORS["dark_red"],
     "Only in File B":        COLORS["dark_green"],
@@ -140,10 +142,15 @@ def export_to_excel(
         dq_rows.append({"Source File": file_b_name, "Issue Type": "Blank / Null Key", **row.to_dict()})
     dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Source File", "Issue Type"])
 
+    metadata_df = _build_metadata_df(result, file_a_name, file_b_name, run_timestamp)
+    rules_df    = _build_rules_df(result)
+
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         summary_df.to_excel(writer,             sheet_name="Summary",               index=False)
         _write_narrative(narrative, writer)
+        metadata_df.to_excel(writer,            sheet_name="Analysis Metadata",     index=False)
+        rules_df.to_excel(writer,               sheet_name="Comparison Rules",      index=False)
         delta_counts.to_excel(writer,           sheet_name="Delta Counts",          index=False)
         _write_sheet(result.only_in_a,    writer, "Only in File A")
         _write_sheet(result.only_in_b,    writer, "Only in File B")
@@ -298,13 +305,57 @@ def _write_sheet(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str) -> N
         )
 
 
+def _build_metadata_df(
+    result: DeltaResult,
+    file_a_name: str,
+    file_b_name: str,
+    run_timestamp: str,
+) -> pd.DataFrame:
+    """Tabular run metadata for the Analysis Metadata tab."""
+    rows = [
+        ("Run Timestamp",            run_timestamp),
+        ("File A Name",              file_a_name),
+        ("File A Sheet",             result.sheet_a or "N/A (first sheet / CSV)"),
+        ("File A Row Count",         str(result.total_a)),
+        ("File B Name",              file_b_name),
+        ("File B Sheet",             result.sheet_b or "N/A (first sheet / CSV)"),
+        ("File B Row Count",         str(result.total_b)),
+        ("Key Columns (File A)",     ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
+        ("Key Columns (File B)",     ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
+        ("Comparison Columns (A)",   ", ".join(result.compare_cols_a) if result.compare_cols_a else "None"),
+        ("Comparison Columns (B)",   ", ".join(result.compare_cols_b) if result.compare_cols_b else "None"),
+        ("Comparison Rule Count",    str(len(result.comparison_rules))),
+        ("Parse Issues Detected",    str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
+    ]
+    return pd.DataFrame(rows, columns=["Parameter", "Value"])
+
+
+def _build_rules_df(result: DeltaResult) -> pd.DataFrame:
+    """Tabular view of every comparison rule."""
+    if not result.comparison_rules:
+        return pd.DataFrame(
+            [["No comparison rules configured."]],
+            columns=["Note"],
+        )
+    rows = []
+    for rule in result.comparison_rules:
+        rows.append({
+            "Column (File A)":  rule.get("column_a", ""),
+            "Column (File B)":  rule.get("column_b", ""),
+            "Type":             rule.get("type", "text"),
+            "Tolerance":        rule.get("tolerance", "") if rule.get("tolerance") is not None else "",
+            "Date Mode":        rule.get("date_mode", "") if rule.get("date_mode") is not None else "",
+        })
+    return pd.DataFrame(rows)
+
+
 def _write_narrative(
     narrative: list[tuple[str, str]],
     writer: pd.ExcelWriter,
 ) -> None:
-    """Write the Executive Narrative as a two-column label/text sheet."""
+    """Write the Executive Summary as a two-column label/text sheet."""
     rows = [{"Section": label, "Narrative": text} for label, text in narrative]
-    pd.DataFrame(rows).to_excel(writer, sheet_name="Executive Narrative", index=False)
+    pd.DataFrame(rows).to_excel(writer, sheet_name="Executive Summary", index=False)
 
 
 def _apply_styles(wb) -> None:
@@ -339,7 +390,7 @@ def _apply_styles(wb) -> None:
                     cell.fill = use_fill
 
         # Narrative tab: wider text column, taller rows
-        if sheet_name == "Executive Narrative":
+        if sheet_name == "Executive Summary":
             ws.column_dimensions["A"].width = 28
             ws.column_dimensions["B"].width = 100
             for row_idx in range(2, ws.max_row + 1):
