@@ -3,13 +3,23 @@ Field-level comparison utilities.
 
 Provides type-aware value comparison supporting:
 - Numeric: optional tolerance for rounding/currency differences
-- Date: format-agnostic comparison (MM/DD/YYYY vs YYYY-MM-DD, etc.)
+- Date: comparison precision control (date_only vs datetime_precision)
 - Text: normalized string comparison (default)
+
+Date modes
+----------
+date_only           Compare only the calendar date; time components are
+                    discarded. "2024-01-15 08:30" == "2024-01-15 14:00".
+                    This is the default for the 'date' comparison type.
+datetime_precision  Compare the full datetime including time. Strings
+                    without an explicit time part are treated as midnight
+                    (00:00:00), so "2024-01-15" == "2024-01-15 00:00:00"
+                    but != "2024-01-15 06:00:00".
 """
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Tuple
 
 import pandas as pd
@@ -28,7 +38,7 @@ def parse_numeric(value) -> Tuple[Optional[float], bool]:
     Parse a value as a float, stripping common currency/formatting characters.
 
     Handles: plain integers, comma-formatted numbers, currency symbols ($£€¥),
-    parenthesised negatives like (1000.00), and leading/trailing whitespace.
+    parenthesised negatives like (1,000.00), and leading/trailing whitespace.
 
     Returns (float_value, True) on success, (None, False) on failure.
     Blank / NaN strings return (None, True) — treated as missing, not invalid.
@@ -57,8 +67,10 @@ def parse_numeric(value) -> Tuple[Optional[float], bool]:
 
 
 # ---------------------------------------------------------------------------
-# Date parsing
+# Date / datetime parsing
 # ---------------------------------------------------------------------------
+
+_BLANK_STRINGS = {"", "nan", "none", "null", "n/a", "na"}
 
 _DATE_FORMATS = [
     "%Y-%m-%d",
@@ -75,37 +87,69 @@ _DATE_FORMATS = [
 
 def parse_date_value(value) -> Tuple[Optional[date], bool]:
     """
-    Parse a value as a date, trying multiple common formats.
+    Parse a value and return only its calendar date (time discarded).
+
+    Used by date_only comparison mode.
 
     Returns (date_object, True) on success, (None, False) on failure.
-    Blank / NaN strings return (None, True) — treated as missing, not invalid.
+    Blank / NaN strings return (None, True) — missing, not invalid.
     """
     if value is None:
         return None, True
 
     s = str(value).strip()
-    if s == "" or s.lower() in ("nan", "none", "null", "n/a", "na"):
+    if s.lower() in _BLANK_STRINGS:
         return None, True
 
-    # Try pandas first — it handles ISO 8601 and datetime strings well
     try:
-        result = pd.to_datetime(s, dayfirst=False)
-        return result.date(), True
+        return pd.to_datetime(s, dayfirst=False).date(), True
     except (ValueError, TypeError):
         pass
 
-    # Try dayfirst fallback for ambiguous formats like "01/02/2024"
     try:
-        result = pd.to_datetime(s, dayfirst=True)
-        return result.date(), True
+        return pd.to_datetime(s, dayfirst=True).date(), True
     except (ValueError, TypeError):
         pass
 
-    # Explicit format loop for edge cases
     for fmt in _DATE_FORMATS:
         try:
-            from datetime import datetime
             return datetime.strptime(s, fmt).date(), True
+        except ValueError:
+            continue
+
+    return None, False
+
+
+def parse_datetime_value(value) -> Tuple[Optional[datetime], bool]:
+    """
+    Parse a value as a full datetime, preserving time components.
+
+    Used by datetime_precision comparison mode. Values without an explicit
+    time part are treated as midnight (00:00:00).
+
+    Returns (datetime_object, True) on success, (None, False) on failure.
+    Blank / NaN strings return (None, True) — missing, not invalid.
+    """
+    if value is None:
+        return None, True
+
+    s = str(value).strip()
+    if s.lower() in _BLANK_STRINGS:
+        return None, True
+
+    try:
+        return pd.to_datetime(s, dayfirst=False).to_pydatetime(), True
+    except (ValueError, TypeError):
+        pass
+
+    try:
+        return pd.to_datetime(s, dayfirst=True).to_pydatetime(), True
+    except (ValueError, TypeError):
+        pass
+
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt), True
         except ValueError:
             continue
 
@@ -130,7 +174,8 @@ def compare_field_values(
     rule         : Dict with keys:
                    - type       : 'text' | 'numeric' | 'date'  (default 'text')
                    - tolerance  : float, used when type == 'numeric'
-                   - date_mode  : 'us' | 'iso' | 'auto'        (default 'auto')
+                   - date_mode  : 'date_only' | 'datetime_precision'
+                                  (default 'date_only' when type == 'date')
 
     Returns
     -------
@@ -175,17 +220,14 @@ def _compare_numeric(val_a, val_b, rule: dict) -> Tuple[bool, str, str, Optional
         issue = f"Could not parse File B value as numeric: '{val_b}'"
 
     if issue:
-        # Fall back to text comparison when parse fails
         from src.normalization import normalize_key_value
         s_a = normalize_key_value(val_a)
         s_b = normalize_key_value(val_b)
         return s_a == s_b, s_a, s_b, issue
 
-    # Both are None (both blank) -> equal
     if n_a is None and n_b is None:
         return True, "", "", None
 
-    # One is None -> unequal
     if n_a is None or n_b is None:
         s_a = "" if n_a is None else str(n_a)
         s_b = "" if n_b is None else str(n_b)
@@ -197,30 +239,54 @@ def _compare_numeric(val_a, val_b, rule: dict) -> Tuple[bool, str, str, Optional
 
 
 def _compare_date(val_a, val_b, rule: dict) -> Tuple[bool, str, str, Optional[str]]:
+    """
+    Compare two date/datetime values.
+
+    date_mode='date_only' (default): strip time, compare calendar dates only.
+    date_mode='datetime_precision':  compare full datetime including time.
+    """
+    mode = rule.get("date_mode") or "date_only"
+
+    if mode == "datetime_precision":
+        return _compare_datetime_precision(val_a, val_b)
+    return _compare_date_only(val_a, val_b)
+
+
+def _compare_date_only(val_a, val_b) -> Tuple[bool, str, str, Optional[str]]:
     d_a, ok_a = parse_date_value(val_a)
     d_b, ok_b = parse_date_value(val_b)
+    return _finish_date_compare(val_a, val_b, d_a, ok_a, d_b, ok_b)
 
+
+def _compare_datetime_precision(val_a, val_b) -> Tuple[bool, str, str, Optional[str]]:
+    d_a, ok_a = parse_datetime_value(val_a)
+    d_b, ok_b = parse_datetime_value(val_b)
+    return _finish_date_compare(val_a, val_b, d_a, ok_a, d_b, ok_b)
+
+
+def _finish_date_compare(
+    raw_a, raw_b, d_a, ok_a, d_b, ok_b
+) -> Tuple[bool, str, str, Optional[str]]:
     issue = None
     if not ok_a and not ok_b:
-        issue = f"Could not parse either value as date: '{val_a}' / '{val_b}'"
+        issue = f"Could not parse either value as date: '{raw_a}' / '{raw_b}'"
     elif not ok_a:
-        issue = f"Could not parse File A value as date: '{val_a}'"
+        issue = f"Could not parse File A value as date: '{raw_a}'"
     elif not ok_b:
-        issue = f"Could not parse File B value as date: '{val_b}'"
+        issue = f"Could not parse File B value as date: '{raw_b}'"
 
     if issue:
         from src.normalization import normalize_key_value
-        s_a = normalize_key_value(val_a)
-        s_b = normalize_key_value(val_b)
-        return s_a == s_b, s_a, s_b, issue
+        return normalize_key_value(raw_a) == normalize_key_value(raw_b), \
+               normalize_key_value(raw_a), normalize_key_value(raw_b), issue
 
     if d_a is None and d_b is None:
         return True, "", "", None
 
     if d_a is None or d_b is None:
-        s_a = "" if d_a is None else d_a.isoformat()
-        s_b = "" if d_b is None else d_b.isoformat()
+        s_a = "" if d_a is None else str(d_a)
+        s_b = "" if d_b is None else str(d_b)
         return False, s_a, s_b, None
 
     is_equal = d_a == d_b
-    return is_equal, d_a.isoformat(), d_b.isoformat(), None
+    return is_equal, str(d_a), str(d_b), None

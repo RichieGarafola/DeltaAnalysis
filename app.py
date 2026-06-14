@@ -301,53 +301,82 @@ if df_a is not None and df_b is not None:
         )
 
     # Advanced comparison settings ----------------------------------------
+    # Uses a type-grouped design: one multiselect per type + shared settings.
+    # This scales to 20+ comparison columns without becoming unusable.
     comparison_rules: list[dict] | None = None
     if compare_cols_a and compare_cols_b and len(compare_cols_a) == len(compare_cols_b):
+        col_pairs = list(zip(compare_cols_a, compare_cols_b))
+        col_labels = [ca if ca == cb else f"{ca} / {cb}" for ca, cb in col_pairs]
+
         with st.expander("Advanced Comparison Settings (optional)", expanded=False):
             st.info(
-                "By default all fields are compared as text. "
-                "Select **numeric** to use a tolerance for rounding/currency differences, "
-                "or **date** to compare dates by calendar value regardless of format."
+                "By default all fields are compared as **text**. "
+                "Use the selectors below to assign numeric tolerance or date-aware "
+                "comparison to specific fields. Fields not assigned remain text."
             )
-            built_rules: list[dict] = []
-            for ca, cb in zip(compare_cols_a, compare_cols_b):
-                col_label = ca if ca == cb else f"{ca} / {cb}"
-                r1, r2, r3 = st.columns([2, 1.5, 1.5])
-                with r1:
-                    ctype = st.selectbox(
-                        f"Type for **{col_label}**",
-                        options=["text", "numeric", "date"],
-                        key=f"ctype_{ca}",
-                    )
-                tolerance = None
-                date_mode = None
-                with r2:
-                    if ctype == "numeric":
-                        tolerance = st.number_input(
-                            "Tolerance",
-                            min_value=0.0,
-                            value=0.0,
-                            step=0.01,
-                            format="%.4f",
-                            key=f"tol_{ca}",
-                            help="Maximum allowed difference — 0 means exact match.",
-                        )
-                with r3:
-                    if ctype == "date":
-                        date_mode = st.selectbox(
-                            "Date mode",
-                            options=["auto", "us", "iso"],
-                            key=f"dmode_{ca}",
-                            help="auto: try US format first; us: MM/DD/YYYY; iso: YYYY-MM-DD.",
-                        )
-                built_rules.append({
-                    "column_a":  ca,
-                    "column_b":  cb,
-                    "type":      ctype,
-                    "tolerance": tolerance,
-                    "date_mode": date_mode,
-                })
-            if any(r["type"] != "text" for r in built_rules):
+
+            adv1, adv2 = st.columns(2)
+
+            with adv1:
+                st.markdown("**Numeric fields**")
+                numeric_labels = st.multiselect(
+                    "Fields to compare as numeric",
+                    options=col_labels,
+                    key="adv_numeric",
+                    help="Currency symbols and commas are stripped automatically.",
+                )
+                numeric_tolerance = st.number_input(
+                    "Tolerance (applies to all numeric fields)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.01,
+                    format="%.4f",
+                    key="adv_tol",
+                    help="Maximum allowed difference — 0.00 means exact match.",
+                )
+
+            with adv2:
+                st.markdown("**Date fields**")
+                date_labels = st.multiselect(
+                    "Fields to compare as dates",
+                    options=[lbl for lbl in col_labels if lbl not in numeric_labels],
+                    key="adv_date",
+                    help="Compares calendar values regardless of input format.",
+                )
+                date_mode = st.selectbox(
+                    "Date precision (applies to all date fields)",
+                    options=["date_only", "datetime_precision"],
+                    key="adv_date_mode",
+                    help=(
+                        "date_only: ignore time — 08:30 and 14:00 on the same day are equal. "
+                        "datetime_precision: include time in the comparison."
+                    ),
+                )
+
+            if numeric_labels or date_labels:
+                built_rules: list[dict] = []
+                for label, (ca, cb) in zip(col_labels, col_pairs):
+                    if label in numeric_labels:
+                        built_rules.append({
+                            "column_a":  ca, "column_b": cb,
+                            "type": "numeric",
+                            "tolerance": numeric_tolerance,
+                            "date_mode": None,
+                        })
+                    elif label in date_labels:
+                        built_rules.append({
+                            "column_a":  ca, "column_b": cb,
+                            "type": "date",
+                            "tolerance": None,
+                            "date_mode": date_mode,
+                        })
+                    else:
+                        built_rules.append({
+                            "column_a":  ca, "column_b": cb,
+                            "type": "text",
+                            "tolerance": None,
+                            "date_mode": None,
+                        })
                 comparison_rules = built_rules
 
     # -----------------------------------------------------------------------

@@ -1,10 +1,16 @@
 """
-Tests for src/comparison.py — parse_numeric, parse_date_value, compare_field_values.
+Tests for src/comparison.py — parse_numeric, parse_date_value, parse_datetime_value,
+compare_field_values (including date_only and datetime_precision modes).
 """
 import pytest
-from datetime import date
+from datetime import date, datetime
 
-from src.comparison import compare_field_values, parse_date_value, parse_numeric
+from src.comparison import (
+    compare_field_values,
+    parse_date_value,
+    parse_datetime_value,
+    parse_numeric,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +111,32 @@ class TestParseDateValue:
 
 
 # ---------------------------------------------------------------------------
+# parse_datetime_value
+# ---------------------------------------------------------------------------
+
+class TestParseDatetimeValue:
+    def test_datetime_string_preserves_time(self):
+        dt, ok = parse_datetime_value("2024-01-15 08:30:00")
+        assert ok and dt == datetime(2024, 1, 15, 8, 30, 0)
+
+    def test_date_only_string_midnight(self):
+        dt, ok = parse_datetime_value("2024-01-15")
+        assert ok and dt == datetime(2024, 1, 15, 0, 0, 0)
+
+    def test_blank_returns_none(self):
+        dt, ok = parse_datetime_value("")
+        assert ok and dt is None
+
+    def test_none_input(self):
+        dt, ok = parse_datetime_value(None)
+        assert ok and dt is None
+
+    def test_invalid_returns_false(self):
+        dt, ok = parse_datetime_value("not-a-date")
+        assert not ok and dt is None
+
+
+# ---------------------------------------------------------------------------
 # compare_field_values
 # ---------------------------------------------------------------------------
 
@@ -162,23 +194,54 @@ class TestCompareFieldValues:
         _, _, _, issue = compare_field_values("abc", "100", rule)
         assert issue is not None
 
-    # --- date ---
+    # --- date: date_only mode (default) ---
     def test_date_equivalent_formats(self):
-        rule = {"type": "date"}
+        rule = {"type": "date", "date_mode": "date_only"}
         is_eq, _, _, issue = compare_field_values("2024-06-01", "06/01/2024", rule)
         assert is_eq and issue is None
 
     def test_date_different(self):
-        rule = {"type": "date"}
+        rule = {"type": "date", "date_mode": "date_only"}
         is_eq, _, _, _ = compare_field_values("2024-06-01", "2024-06-02", rule)
         assert not is_eq
 
-    def test_date_both_blank(self):
+    def test_date_only_ignores_time(self):
+        rule = {"type": "date", "date_mode": "date_only"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15 08:30:00", "2024-01-15 14:00:00", rule)
+        assert is_eq
+
+    def test_date_only_default_when_mode_absent(self):
         rule = {"type": "date"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15 08:30:00", "2024-01-15 23:59:00", rule)
+        assert is_eq
+
+    def test_date_both_blank(self):
+        rule = {"type": "date", "date_mode": "date_only"}
         is_eq, _, _, issue = compare_field_values("", "", rule)
         assert is_eq and issue is None
 
     def test_date_invalid_returns_issue(self):
-        rule = {"type": "date"}
+        rule = {"type": "date", "date_mode": "date_only"}
         _, _, _, issue = compare_field_values("not-a-date", "2024-01-01", rule)
         assert issue is not None
+
+    # --- date: datetime_precision mode ---
+    def test_datetime_precision_same_time_equal(self):
+        rule = {"type": "date", "date_mode": "datetime_precision"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15 08:30:00", "2024-01-15 08:30:00", rule)
+        assert is_eq
+
+    def test_datetime_precision_different_time_not_equal(self):
+        rule = {"type": "date", "date_mode": "datetime_precision"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15 08:30:00", "2024-01-15 14:00:00", rule)
+        assert not is_eq
+
+    def test_datetime_precision_date_only_strings_equal(self):
+        rule = {"type": "date", "date_mode": "datetime_precision"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15", "2024-01-15 00:00:00", rule)
+        assert is_eq
+
+    def test_datetime_precision_different_dates_not_equal(self):
+        rule = {"type": "date", "date_mode": "datetime_precision"}
+        is_eq, _, _, _ = compare_field_values("2024-01-15", "2024-01-16", rule)
+        assert not is_eq
