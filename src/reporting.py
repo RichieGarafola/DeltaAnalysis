@@ -38,21 +38,21 @@ _HEADER_COLORS = {
     "Analysis Metadata":                COLORS["slate"],
     "Comparison Rules":                 COLORS["slate"],
     "Delta Counts":                     COLORS["navy"],
-    "Baseline Only Records":            COLORS["navy"],
+    "Source Only Records":              COLORS["navy"],
     "Comparison Only Records":          COLORS["med_blue"],
     "Matched Records":                  COLORS["navy"],
-    "Records with Differences":         COLORS["med_blue"],
-    "Baseline Duplicate Identifiers":   COLORS["slate"],
-    "Comparison Duplicates":            COLORS["slate"],
+    "Changed Records":                  COLORS["med_blue"],
+    "Source Duplicate Keys":            COLORS["slate"],
+    "Comparison Duplicate Keys":        COLORS["slate"],
     "Data Quality Flags":               COLORS["slate"],
 }
 
 _ROW_FILL_COLORS = {
-    "Baseline Only Records":            COLORS["pale_blue"],
+    "Source Only Records":              COLORS["pale_blue"],
     "Comparison Only Records":          COLORS["pale_blue"],
-    "Records with Differences":         COLORS["pale_blue"],
-    "Baseline Duplicate Identifiers":   COLORS["light_gray"],
-    "Comparison Duplicates":            COLORS["light_gray"],
+    "Changed Records":                  COLORS["pale_blue"],
+    "Source Duplicate Keys":            COLORS["light_gray"],
+    "Comparison Duplicate Keys":        COLORS["light_gray"],
 }
 
 
@@ -72,16 +72,16 @@ def build_summary_df(result: DeltaResult) -> pd.DataFrame:
         return f"{n / denom * 100:.1f}%"
 
     rows = [
-        ("Baseline Dataset: Total Records",        total_a,                   ""),
+        ("Source Dataset: Total Records",          total_a,                   ""),
         ("Comparison Dataset: Total Records",      total_b,                   ""),
-        ("Baseline Only Records",                  len(result.only_in_a),     pct(len(result.only_in_a), total_a)),
+        ("Source Only Records",                    len(result.only_in_a),     pct(len(result.only_in_a), total_a)),
         ("Comparison Only Records",                len(result.only_in_b),     pct(len(result.only_in_b), total_b)),
         ("Matched Records",                        n_matched,                 pct(n_matched, total_a)),
-        ("Records with Differences",               len(result.changed),       pct(len(result.changed), n_matched) if n_matched else "N/A"),
-        ("Baseline Duplicate Identifiers",         len(result.duplicates_a),  pct(len(result.duplicates_a), total_a)),
-        ("Comparison Duplicates",                  len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
-        ("Baseline Missing Identifiers",           len(result.blank_keys_a),  pct(len(result.blank_keys_a), total_a)),
-        ("Comparison Missing Identifiers",         len(result.blank_keys_b),  pct(len(result.blank_keys_b), total_b)),
+        ("Changed Records",                        len(result.changed),       pct(len(result.changed), n_matched) if n_matched else "N/A"),
+        ("Source Duplicate Keys",                  len(result.duplicates_a),  pct(len(result.duplicates_a), total_a)),
+        ("Comparison Duplicate Keys",              len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
+        ("Source Missing Keys",                    len(result.blank_keys_a),  pct(len(result.blank_keys_a), total_a)),
+        ("Comparison Missing Keys",                len(result.blank_keys_b),  pct(len(result.blank_keys_b), total_b)),
     ]
 
     return pd.DataFrame(rows, columns=["Metric", "Count", "% of Dataset Total"])
@@ -98,7 +98,7 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
 
     rows = []
     for col in result.compare_cols_a:
-        a_col = f"{col} - Baseline"
+        a_col = f"{col} - Source"
         b_col = f"{col} - Comparison"
         if a_col in result.changed.columns and b_col in result.changed.columns:
             n_changed = (result.changed[a_col] != result.changed[b_col]).sum()
@@ -116,12 +116,17 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
 
 def export_to_excel(
     result: DeltaResult,
-    file_a_name: str = "File A",
-    file_b_name: str = "File B",
+    file_a_name: str = "Source Dataset",
+    file_b_name: str = "Comparison Dataset",
+    prep_meta_a: Optional[dict] = None,
+    prep_meta_b: Optional[dict] = None,
 ) -> bytes:
     """
     Build a polished, multi-tab Excel workbook from a DeltaResult.
     Returns raw bytes for Streamlit download.
+
+    prep_meta_a / prep_meta_b : optional dicts from prepare_dataframe_from_raw;
+    when provided, their contents are appended to the Analysis Metadata tab.
     """
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -131,12 +136,12 @@ def export_to_excel(
     # Data Quality Flags: rows excluded due to missing match key identifiers
     dq_rows: list[dict] = []
     for _, row in result.blank_keys_a.iterrows():
-        dq_rows.append({"Dataset": "Baseline", "Filename": file_a_name, "Flag": "Missing Identifier", **row.to_dict()})
+        dq_rows.append({"Dataset": "Source", "Filename": file_a_name, "Flag": "Missing Identifier", **row.to_dict()})
     for _, row in result.blank_keys_b.iterrows():
         dq_rows.append({"Dataset": "Comparison", "Filename": file_b_name, "Flag": "Missing Identifier", **row.to_dict()})
     dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Dataset", "Filename", "Flag"])
 
-    metadata_df = _build_metadata_df(result, file_a_name, file_b_name, run_timestamp)
+    metadata_df = _build_metadata_df(result, file_a_name, file_b_name, run_timestamp, prep_meta_a, prep_meta_b)
     rules_df    = _build_rules_df(result)
 
     buffer = io.BytesIO()
@@ -145,12 +150,12 @@ def export_to_excel(
         metadata_df.to_excel(writer,            sheet_name="Analysis Metadata",     index=False)
         rules_df.to_excel(writer,               sheet_name="Comparison Rules",      index=False)
         delta_counts.to_excel(writer,           sheet_name="Delta Counts",          index=False)
-        _write_sheet(result.only_in_a,    writer, "Baseline Only Records")
+        _write_sheet(result.only_in_a,    writer, "Source Only Records")
         _write_sheet(result.only_in_b,    writer, "Comparison Only Records")
         _write_sheet(result.matched,      writer, "Matched Records")
-        _write_sheet(result.changed,      writer, "Records with Differences")
-        _write_sheet(result.duplicates_a, writer, "Baseline Duplicate Identifiers")
-        _write_sheet(result.duplicates_b, writer, "Comparison Duplicates")
+        _write_sheet(result.changed,      writer, "Changed Records")
+        _write_sheet(result.duplicates_a, writer, "Source Duplicate Keys")
+        _write_sheet(result.duplicates_b, writer, "Comparison Duplicate Keys")
         _write_sheet(dq_df,               writer, "Data Quality Flags")
 
     # Post-process: styling
@@ -194,21 +199,21 @@ def _build_narrative(
     key_label = " + ".join(result.key_cols_a) if result.key_cols_a else "configured match key(s)"
 
     overview = (
-        f"A bidirectional reconciliation was performed between the baseline dataset ({file_a_name}, "
+        f"A bidirectional reconciliation was performed between the source dataset ({file_a_name}, "
         f"{total_a:,} records) and the comparison dataset ({file_b_name}, {total_b:,} records). "
         f"Records were matched using the identifier field(s): {key_label}. "
         f"Analysis completed: {run_timestamp}."
     )
 
     matching = (
-        f"Of the {total_a:,} baseline records, {n_matched:,} ({pct(n_matched, total_a)}) were "
+        f"Of the {total_a:,} source records, {n_matched:,} ({pct(n_matched, total_a)}) were "
         f"matched to a corresponding record in the comparison dataset. "
-        f"{n_only_a:,} records ({pct(n_only_a, total_a)} of baseline) appear exclusively in "
+        f"{n_only_a:,} records ({pct(n_only_a, total_a)} of source) appear exclusively in "
         f"{file_a_name} and are absent from the comparison dataset; these may represent "
-        f"withdrawn entries, pending submissions, or records not yet reflected in the comparison source. "
+        f"withdrawn entries, pending submissions, or records not yet reflected in the comparison dataset. "
         f"{n_only_b:,} records ({pct(n_only_b, total_b)} of comparison) appear exclusively in "
-        f"{file_b_name} and have no corresponding baseline entry; these may represent new "
-        f"submissions, late arrivals, or records not yet posted to the baseline."
+        f"{file_b_name} and have no corresponding source entry; these may represent new "
+        f"submissions, late arrivals, or records not yet posted to the source dataset."
     )
 
     if result.compare_cols_a:
@@ -234,7 +239,7 @@ def _build_narrative(
 
     if n_dup_a > 0 or n_dup_b > 0:
         duplicates = (
-            f"{n_dup_a:,} baseline record(s) and {n_dup_b:,} comparison record(s) share a "
+            f"{n_dup_a:,} source record(s) and {n_dup_b:,} comparison record(s) share a "
             f"match key with at least one other row in the same dataset. All duplicate rows are "
             f"documented in the identifier worksheets; only the first occurrence of each "
             f"identifier was used in the matching process. Duplicate submissions should be "
@@ -248,7 +253,7 @@ def _build_narrative(
 
     if n_blank_a > 0 or n_blank_b > 0:
         blanks = (
-            f"{n_blank_a:,} baseline record(s) and {n_blank_b:,} comparison record(s) contained "
+            f"{n_blank_a:,} source record(s) and {n_blank_b:,} comparison record(s) contained "
             f"a blank or null value in the match key field(s) and were excluded from the "
             f"reconciliation. These records are captured in the Data Quality Flags worksheet. "
             f"Source system corrections are required before these records can be included in "
@@ -262,12 +267,12 @@ def _build_narrative(
 
     recommendation = (
         f"Priority actions: "
-        f"(1) Investigate {n_only_a:,} baseline-only record(s): confirm whether these represent "
+        f"(1) Investigate {n_only_a:,} source-only record(s): confirm whether these represent "
         f"intentional removals, pending resubmissions, or data feed gaps. "
         f"(2) Validate {n_only_b:,} comparison-only record(s) against the authoritative source "
         f"of record before accepting as new entries. "
-        f"(3) Review {n_changed:,} record(s) with field-level differences to determine whether "
-        f"changes reflect authorized updates or require correction. "
+        f"(3) Review {n_changed:,} changed record(s) to determine whether "
+        f"field-level differences reflect authorized updates or require correction. "
         f"(4) Resolve all data quality flags (duplicate identifiers and missing key values) "
         f"at the source system level."
     )
@@ -289,16 +294,16 @@ def _build_narrative(
 def _build_delta_counts_df(result: DeltaResult) -> pd.DataFrame:
     """Flat reconciliation count table suitable for pivot tables and downstream reporting."""
     return pd.DataFrame([
-        {"Category": "Baseline Dataset: Total Records",    "Count": result.total_a,              "Source": "Baseline"},
-        {"Category": "Comparison Dataset: Total Records",  "Count": result.total_b,              "Source": "Comparison"},
-        {"Category": "Baseline Only Records",               "Count": len(result.only_in_a),       "Source": "Baseline"},
-        {"Category": "Comparison Only Records",             "Count": len(result.only_in_b),       "Source": "Comparison"},
-        {"Category": "Matched Records",                     "Count": len(result.matched),         "Source": "Both"},
-        {"Category": "Records with Differences",            "Count": len(result.changed),         "Source": "Both"},
-        {"Category": "Baseline Duplicate Identifiers",      "Count": len(result.duplicates_a),    "Source": "Baseline"},
-        {"Category": "Comparison Duplicates",               "Count": len(result.duplicates_b),    "Source": "Comparison"},
-        {"Category": "Baseline Missing Identifiers",        "Count": len(result.blank_keys_a),    "Source": "Baseline"},
-        {"Category": "Comparison Missing Identifiers",      "Count": len(result.blank_keys_b),    "Source": "Comparison"},
+        {"Category": "Source Dataset: Total Records",      "Count": result.total_a,              "Dataset": "Source"},
+        {"Category": "Comparison Dataset: Total Records",  "Count": result.total_b,              "Dataset": "Comparison"},
+        {"Category": "Source Only Records",                "Count": len(result.only_in_a),       "Dataset": "Source"},
+        {"Category": "Comparison Only Records",            "Count": len(result.only_in_b),       "Dataset": "Comparison"},
+        {"Category": "Matched Records",                    "Count": len(result.matched),         "Dataset": "Both"},
+        {"Category": "Changed Records",                    "Count": len(result.changed),         "Dataset": "Both"},
+        {"Category": "Source Duplicate Keys",              "Count": len(result.duplicates_a),    "Dataset": "Source"},
+        {"Category": "Comparison Duplicate Keys",          "Count": len(result.duplicates_b),    "Dataset": "Comparison"},
+        {"Category": "Source Missing Keys",                "Count": len(result.blank_keys_a),    "Dataset": "Source"},
+        {"Category": "Comparison Missing Keys",            "Count": len(result.blank_keys_b),    "Dataset": "Comparison"},
     ])
 
 
@@ -316,23 +321,44 @@ def _build_metadata_df(
     file_a_name: str,
     file_b_name: str,
     run_timestamp: str,
+    prep_meta_a: Optional[dict] = None,
+    prep_meta_b: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Tabular run metadata for the Analysis Metadata tab."""
     rows = [
         ("Analysis Timestamp",                   run_timestamp),
-        ("Baseline Dataset",                     file_a_name),
-        ("Baseline Sheet / Tab",                 result.sheet_a or "Default (first sheet or CSV)"),
-        ("Baseline Record Count",                str(result.total_a)),
+        ("Source Dataset",                       file_a_name),
+        ("Source Sheet / Tab",                   result.sheet_a or "Default (first sheet or CSV)"),
+        ("Source Record Count",                  str(result.total_a)),
         ("Comparison Dataset",                   file_b_name),
         ("Comparison Sheet / Tab",               result.sheet_b or "Default (first sheet or CSV)"),
         ("Comparison Record Count",              str(result.total_b)),
-        ("Match Key Fields (Baseline)",          ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
+        ("Match Key Fields (Source)",            ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
         ("Match Key Fields (Comparison)",        ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
-        ("Comparison Fields (Baseline)",         ", ".join(result.compare_cols_a) if result.compare_cols_a else "None configured"),
+        ("Comparison Fields (Source)",           ", ".join(result.compare_cols_a) if result.compare_cols_a else "None configured"),
         ("Comparison Fields (Comparison)",       ", ".join(result.compare_cols_b) if result.compare_cols_b else "None configured"),
         ("Comparison Rules Applied",             str(len(result.comparison_rules))),
         ("Parse Warnings",                       str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
     ]
+
+    if prep_meta_a:
+        rows.extend([
+            ("Source Header Row Selected",        str(prep_meta_a.get("header_row_selected", ""))),
+            ("Source Rows Dropped Above Header",  str(prep_meta_a.get("rows_dropped_above_header", ""))),
+            ("Source Blank Rows Dropped",         str(prep_meta_a.get("rows_dropped_blank", ""))),
+        ])
+        if prep_meta_a.get("end_row_applied") is not None:
+            rows.append(("Source End Row Applied", str(prep_meta_a["end_row_applied"])))
+
+    if prep_meta_b:
+        rows.extend([
+            ("Comparison Header Row Selected",        str(prep_meta_b.get("header_row_selected", ""))),
+            ("Comparison Rows Dropped Above Header",  str(prep_meta_b.get("rows_dropped_above_header", ""))),
+            ("Comparison Blank Rows Dropped",         str(prep_meta_b.get("rows_dropped_blank", ""))),
+        ])
+        if prep_meta_b.get("end_row_applied") is not None:
+            rows.append(("Comparison End Row Applied", str(prep_meta_b["end_row_applied"])))
+
     return pd.DataFrame(rows, columns=["Parameter", "Value"])
 
 
@@ -346,7 +372,7 @@ def _build_rules_df(result: DeltaResult) -> pd.DataFrame:
     rows = []
     for rule in result.comparison_rules:
         rows.append({
-            "Baseline Field":   rule.get("column_a", ""),
+            "Source Field":     rule.get("column_a", ""),
             "Comparison Field": rule.get("column_b", ""),
             "Type":             rule.get("type", "text"),
             "Tolerance":        rule.get("tolerance", "") if rule.get("tolerance") is not None else "",

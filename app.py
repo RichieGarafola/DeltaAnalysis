@@ -16,11 +16,13 @@ import streamlit as st
 
 from src.delta_engine import DeltaResult, run_delta
 from src.io_utils import (
+    RAW_PREVIEW_ROWS,
     check_file_size,
     get_column_preview,
     get_display_frame,
     get_excel_sheet_names,
-    read_uploaded_file,
+    prepare_dataframe_from_raw,
+    read_raw_file,
 )
 from src.reporting import build_change_frequency, build_summary_df, export_to_excel
 
@@ -102,6 +104,101 @@ def _csv_download(label: str, df: pd.DataFrame, filename: str) -> None:
         st.caption("No records to download for this category.")
 
 
+def _prep_controls(
+    raw_df: pd.DataFrame,
+    label: str,
+    key_prefix: str,
+):
+    """
+    Render data preparation controls for one dataset.
+    Returns (prepared_df, metadata) or (None, None) on error.
+    """
+    n_rows = len(raw_df)
+    st.markdown(f"**{label}**")
+
+    preview_rows = min(RAW_PREVIEW_ROWS, n_rows)
+    st.caption(f"Raw file preview (first {preview_rows} of {n_rows} rows, columns indexed from 0):")
+    raw_preview = raw_df.head(preview_rows).copy()
+    raw_preview.index.name = "Row #"
+    st.dataframe(raw_preview, use_container_width=True, hide_index=False)
+
+    header_row = int(st.number_input(
+        "Header row (0-based row number)",
+        min_value=0,
+        max_value=max(0, n_rows - 1),
+        value=0,
+        step=1,
+        key=f"{key_prefix}_header_row",
+        help=(
+            "Row number that contains the column headers (0 = first row). "
+            "Rows before this will be dropped when 'Drop rows above header' is enabled."
+        ),
+    ))
+
+    if 0 <= header_row < n_rows:
+        header_vals = raw_df.iloc[header_row].tolist()
+        preview_str = " | ".join(str(v)[:25] for v in header_vals[:12])
+        if len(header_vals) > 12:
+            preview_str += " ..."
+        st.caption(f"Row {header_row} header preview: {preview_str}")
+
+    drop_above = st.checkbox(
+        "Drop rows above header",
+        value=True,
+        key=f"{key_prefix}_drop_above",
+        help="Remove all rows that appear before the selected header row.",
+    )
+    drop_blank = st.checkbox(
+        "Drop blank rows",
+        value=True,
+        key=f"{key_prefix}_drop_blank",
+        help="Remove rows where every cell is empty or contains only whitespace.",
+    )
+
+    use_end_row = st.checkbox(
+        "Apply end row limit",
+        value=False,
+        key=f"{key_prefix}_use_end",
+        help="Stop reading data after a specific row (useful for files with trailing metadata or totals).",
+    )
+    end_row = None
+    if use_end_row:
+        end_row = int(st.number_input(
+            "End row (0-based, inclusive)",
+            min_value=header_row + 1,
+            max_value=max(header_row + 1, n_rows - 1),
+            value=max(header_row + 1, n_rows - 1),
+            step=1,
+            key=f"{key_prefix}_end_row",
+            help="Last row (0-based) to include in the data body.",
+        ))
+
+    try:
+        prep_df, meta, warns = prepare_dataframe_from_raw(
+            raw_df,
+            header_row_index=header_row,
+            drop_rows_above=drop_above,
+            drop_blank_rows=drop_blank,
+            end_row_index=end_row,
+        )
+        for w in warns:
+            st.warning(w)
+        st.caption(
+            f"Prepared dataset: {meta['final_row_count']:,} data row(s), "
+            f"{meta['final_column_count']} column(s)."
+        )
+        if not prep_df.empty:
+            st.dataframe(
+                get_column_preview(prep_df),
+                use_container_width=True,
+                hide_index=True,
+            )
+        return prep_df, meta
+    except ValueError as exc:
+        st.error(f"Preparation error: {exc}")
+        return None, None
+
+
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
@@ -109,7 +206,7 @@ def _csv_download(label: str, df: pd.DataFrame, filename: str) -> None:
 st.markdown('<div class="main-header">Delta Analysis Tool</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-header">'
-    "Upload a Baseline Dataset and a Comparison Dataset, define your match keys, and generate "
+    "Upload a Source Dataset and a Comparison Dataset, define your match keys, and generate "
     "a full bidirectional reconciliation. Supports government financial reconciliation, "
     "receipt tracking, contract audits, and duplicate submission review."
     "</div>",
@@ -126,9 +223,9 @@ st.markdown('<div class="section-title">Step 1: Upload Datasets</div>', unsafe_a
 col_a, col_b = st.columns(2)
 
 with col_a:
-    st.markdown("**Baseline Dataset:** Prior period, source of record, or authoritative extract")
+    st.markdown("**Source Dataset:** Prior period, source of record, or authoritative extract")
     file_a = st.file_uploader(
-        "Upload Baseline Dataset",
+        "Upload Source Dataset",
         type=["csv", "xlsx", "xls"],
         key="upload_a",
         label_visibility="collapsed",
@@ -143,8 +240,8 @@ with col_b:
         label_visibility="collapsed",
     )
 
-df_a: pd.DataFrame | None = None
-df_b: pd.DataFrame | None = None
+raw_a: pd.DataFrame | None = None
+raw_b: pd.DataFrame | None = None
 sheet_a_selected: str | None = None
 sheet_b_selected: str | None = None
 _large_file_blocked = False
@@ -154,28 +251,28 @@ if file_a:
         sheets_a = get_excel_sheet_names(file_a)
         if len(sheets_a) > 1:
             sheet_a_selected = st.selectbox(
-                "Sheet: Baseline Dataset",
+                "Sheet: Source Dataset",
                 options=sheets_a,
                 key="sheet_a",
             )
         elif sheets_a:
             sheet_a_selected = sheets_a[0]
     try:
-        df_a = read_uploaded_file(file_a, sheet_name=sheet_a_selected)
+        raw_a = read_raw_file(file_a, sheet_name=sheet_a_selected)
         with col_a:
-            st.success(f"{len(df_a):,} rows x {len(df_a.columns)} columns loaded")
-            size_status, size_msg = check_file_size(len(df_a))
+            st.success(f"{len(raw_a):,} rows detected (header assignment in Step 2)")
+            size_status, size_msg = check_file_size(len(raw_a))
             if size_status == "warn":
-                st.warning(f"Baseline Dataset: {size_msg}")
+                st.warning(f"Source Dataset: {size_msg}")
             elif size_status == "hard":
-                st.error(f"Baseline Dataset: {size_msg}")
+                st.error(f"Source Dataset: {size_msg}")
                 if not st.checkbox(
-                    "I understand the risk; proceed anyway (Baseline Dataset)", key="hard_a"
+                    "I understand the risk; proceed anyway (Source Dataset)", key="hard_a"
                 ):
                     _large_file_blocked = True
     except ValueError as exc:
         with col_a:
-            st.error(f"Baseline Dataset error: {exc}")
+            st.error(f"Source Dataset error: {exc}")
 
 if file_b:
     with col_b:
@@ -189,10 +286,10 @@ if file_b:
         elif sheets_b:
             sheet_b_selected = sheets_b[0]
     try:
-        df_b = read_uploaded_file(file_b, sheet_name=sheet_b_selected)
+        raw_b = read_raw_file(file_b, sheet_name=sheet_b_selected)
         with col_b:
-            st.success(f"{len(df_b):,} rows x {len(df_b.columns)} columns loaded")
-            size_status, size_msg = check_file_size(len(df_b))
+            st.success(f"{len(raw_b):,} rows detected (header assignment in Step 2)")
+            size_status, size_msg = check_file_size(len(raw_b))
             if size_status == "warn":
                 st.warning(f"Comparison Dataset: {size_msg}")
             elif size_status == "hard":
@@ -205,26 +302,43 @@ if file_b:
         with col_b:
             st.error(f"Comparison Dataset error: {exc}")
 
-if df_a is not None or df_b is not None:
-    with st.expander("Preview uploaded data (first 5 rows)", expanded=False):
-        p1, p2 = st.columns(2)
-        if df_a is not None:
-            with p1:
-                st.markdown("**Baseline Dataset**")
-                st.dataframe(get_column_preview(df_a), use_container_width=True, hide_index=True)
-        if df_b is not None:
-            with p2:
-                st.markdown("**Comparison Dataset**")
-                st.dataframe(get_column_preview(df_b), use_container_width=True, hide_index=True)
+# ---------------------------------------------------------------------------
+# Step 2: Prepare Data
+# ---------------------------------------------------------------------------
+
+df_a: pd.DataFrame | None = None
+df_b: pd.DataFrame | None = None
+prep_meta_a: dict | None = None
+prep_meta_b: dict | None = None
+
+if raw_a is not None and raw_b is not None:
+    st.divider()
+    st.markdown(
+        '<div class="section-title">Step 2: Prepare Data</div>',
+        unsafe_allow_html=True,
+    )
+    st.info(
+        "Review the raw file contents and assign the correct header row for each dataset. "
+        "Rows above the header (report titles, agency metadata, blank separators) can be "
+        "excluded automatically. Trailing blank rows are removed by default."
+    )
+
+    prep_col_a, prep_col_b = st.columns(2)
+
+    with prep_col_a:
+        df_a, prep_meta_a = _prep_controls(raw_a, "Source Dataset", "prep_a")
+
+    with prep_col_b:
+        df_b, prep_meta_b = _prep_controls(raw_b, "Comparison Dataset", "prep_b")
 
 # ---------------------------------------------------------------------------
-# Step 2: Key column configuration
+# Step 3: Key column configuration
 # ---------------------------------------------------------------------------
 
 if df_a is not None and df_b is not None:
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 2: Configure Match Keys</div>',
+        '<div class="section-title">Step 3: Configure Match Keys</div>',
         unsafe_allow_html=True,
     )
     st.info(
@@ -236,9 +350,9 @@ if df_a is not None and df_b is not None:
     k1, k2 = st.columns(2)
     with k1:
         key_cols_a = st.multiselect(
-            "Match key column(s): Baseline Dataset",
+            "Match key column(s): Source Dataset",
             options=df_a.columns.tolist(),
-            help="Column(s) that uniquely identify each record in the Baseline Dataset.",
+            help="Column(s) that uniquely identify each record in the Source Dataset.",
         )
     with k2:
         key_cols_b = st.multiselect(
@@ -250,24 +364,24 @@ if df_a is not None and df_b is not None:
     if key_cols_a and key_cols_b:
         if len(key_cols_a) != len(key_cols_b):
             st.warning(
-                f"Match key column count mismatch. Baseline: {len(key_cols_a)} column(s), "
+                f"Match key column count mismatch. Source: {len(key_cols_a)} column(s), "
                 f"Comparison: {len(key_cols_b)} column(s). Counts must match."
             )
         else:
             st.markdown("**Key mapping (matched positionally):**")
             st.dataframe(
-                pd.DataFrame({"Baseline Key": key_cols_a, "Comparison Key": key_cols_b}),
+                pd.DataFrame({"Source Key": key_cols_a, "Comparison Key": key_cols_b}),
                 use_container_width=False,
                 hide_index=True,
             )
 
     # -----------------------------------------------------------------------
-    # Step 3: Comparison columns
+    # Step 4: Comparison columns
     # -----------------------------------------------------------------------
 
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 3: Select Fields to Compare</div>',
+        '<div class="section-title">Step 4: Select Fields to Compare</div>',
         unsafe_allow_html=True,
     )
     st.info(
@@ -283,7 +397,7 @@ if df_a is not None and df_b is not None:
     c1, c2 = st.columns(2)
     with c1:
         compare_cols_a = st.multiselect(
-            "Comparison fields: Baseline Dataset",
+            "Comparison fields: Source Dataset",
             options=[c for c in df_a.columns if c not in key_cols_a],
             default=common_non_key,
         )
@@ -296,20 +410,18 @@ if df_a is not None and df_b is not None:
 
     if compare_cols_a and compare_cols_b and len(compare_cols_a) != len(compare_cols_b):
         st.warning(
-            f"Comparison field count mismatch. Baseline: {len(compare_cols_a)}, "
+            f"Comparison field count mismatch. Source: {len(compare_cols_a)}, "
             f"Comparison: {len(compare_cols_b)}. Counts must match."
         )
     elif compare_cols_a and compare_cols_b:
         st.markdown("**Field mapping (matched positionally):**")
         st.dataframe(
-            pd.DataFrame({"Baseline Field": compare_cols_a, "Comparison Field": compare_cols_b}),
+            pd.DataFrame({"Source Field": compare_cols_a, "Comparison Field": compare_cols_b}),
             use_container_width=False,
             hide_index=True,
         )
 
-    # Advanced comparison settings ----------------------------------------
-    # Type-grouped design: one multiselect per type + shared settings.
-    # Scales to 20+ comparison fields without widget proliferation.
+    # Advanced comparison settings
     comparison_rules: list[dict] | None = None
     if compare_cols_a and compare_cols_b and len(compare_cols_a) == len(compare_cols_b):
         col_pairs = list(zip(compare_cols_a, compare_cols_b))
@@ -397,12 +509,12 @@ if df_a is not None and df_b is not None:
                 comparison_rules = built_rules
 
     # -----------------------------------------------------------------------
-    # Step 4: Run
+    # Step 5: Run
     # -----------------------------------------------------------------------
 
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 4: Run Analysis</div>',
+        '<div class="section-title">Step 5: Run Analysis</div>',
         unsafe_allow_html=True,
     )
 
@@ -418,7 +530,7 @@ if df_a is not None and df_b is not None:
     if _large_file_blocked:
         st.warning("Confirm the large-file warning above before running the analysis.")
 
-    if st.button("▶  Run Delta Analysis", type="primary", disabled=not run_ready):
+    if st.button("Run Delta Analysis", type="primary", disabled=not run_ready):
         with st.spinner("Running reconciliation..."):
             try:
                 result: DeltaResult = run_delta(
@@ -435,6 +547,8 @@ if df_a is not None and df_b is not None:
                 st.session_state["result"]      = result
                 st.session_state["file_a_name"] = file_a.name
                 st.session_state["file_b_name"] = file_b.name
+                st.session_state["prep_meta_a"] = prep_meta_a
+                st.session_state["prep_meta_b"] = prep_meta_b
                 st.success("Analysis complete. Review the results below.")
             except ValueError as exc:
                 st.error(f"Analysis error: {exc}")
@@ -447,7 +561,7 @@ if df_a is not None and df_b is not None:
 
 if "result" in st.session_state:
     result: DeltaResult = st.session_state["result"]
-    file_a_name: str    = st.session_state.get("file_a_name", "Baseline Dataset")
+    file_a_name: str    = st.session_state.get("file_a_name", "Source Dataset")
     file_b_name: str    = st.session_state.get("file_b_name", "Comparison Dataset")
 
     n_only_a  = len(result.only_in_a)
@@ -471,15 +585,15 @@ if "result" in st.session_state:
 
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric(
-        "Baseline Total", f"{result.total_a:,}",
+        "Source Records", f"{result.total_a:,}",
         help=f"Total records loaded from {file_a_name}",
     )
     k2.metric(
-        "Comparison Total", f"{result.total_b:,}",
+        "Comparison Records", f"{result.total_b:,}",
         help=f"Total records loaded from {file_b_name}",
     )
     k3.metric(
-        "Baseline Only", f"{n_only_a:,}",
+        "Source Only", f"{n_only_a:,}",
         help=f"Records whose key appears in {file_a_name} but not in {file_b_name}",
     )
     k4.metric(
@@ -493,23 +607,23 @@ if "result" in st.session_state:
 
     k6, k7, k8, k9, k10 = st.columns(5)
     k6.metric(
-        "Records with Differences", f"{n_changed:,}",
+        "Changed Records", f"{n_changed:,}",
         help="Matched records where at least one compared field differs between datasets",
     )
     k7.metric(
-        "Baseline Duplicates", f"{n_dup_a:,}",
+        "Source Duplicate Keys", f"{n_dup_a:,}",
         help=f"Rows sharing a match key with at least one other row in {file_a_name}",
     )
     k8.metric(
-        "Comparison Duplicates", f"{n_dup_b:,}",
+        "Comparison Duplicate Keys", f"{n_dup_b:,}",
         help=f"Rows sharing a match key with at least one other row in {file_b_name}",
     )
     k9.metric(
-        "Missing Identifiers (Baseline)", f"{n_blank_a:,}",
+        "Source Missing Keys", f"{n_blank_a:,}",
         help=f"Rows with a blank or null match key in {file_a_name} (excluded from reconciliation)",
     )
     k10.metric(
-        "Missing Identifiers (Comparison)", f"{n_blank_b:,}",
+        "Comparison Missing Keys", f"{n_blank_b:,}",
         help=f"Rows with a blank or null match key in {file_b_name} (excluded from reconciliation)",
     )
 
@@ -531,13 +645,13 @@ if "result" in st.session_state:
     with viz1:
         st.markdown("**Reconciliation Summary**")
         cat_labels = [
-            "Baseline Only",
+            "Source Only",
             "Comparison Only",
             "Matched",
-            "Records w/ Diffs",
-            "Baseline Dupes",
-            "Comparison Dupes",
-            "Missing (Baseline)",
+            "Changed",
+            "Source Duplicates",
+            "Comparison Duplicates",
+            "Missing (Source)",
             "Missing (Comparison)",
         ]
         cat_values = [
@@ -546,14 +660,14 @@ if "result" in st.session_state:
             n_blank_a, n_blank_b,
         ]
         cat_colors = [
-            "#1F4E79",  # Baseline Only
-            "#2F75B5",  # Comparison Only
-            "#9DC3E6",  # Matched
-            "#1F4E79",  # Records with Differences
-            "#44546A",  # Baseline Duplicates
-            "#44546A",  # Comparison Duplicates
-            "#9DC3E6",  # Missing Baseline
-            "#9DC3E6",  # Missing Comparison
+            "#1F4E79",
+            "#2F75B5",
+            "#9DC3E6",
+            "#1F4E79",
+            "#44546A",
+            "#44546A",
+            "#9DC3E6",
+            "#9DC3E6",
         ]
         fig_bar = go.Figure(go.Bar(
             x=cat_labels,
@@ -577,7 +691,7 @@ if "result" in st.session_state:
     # Chart 2: Match Coverage donut
     with viz2:
         st.markdown("**Match Coverage**")
-        pie_labels = ["Matched", "Baseline Only", "Comparison Only"]
+        pie_labels = ["Matched", "Source Only", "Comparison Only"]
         pie_values = [n_matched, n_only_a, n_only_b]
         pie_colors = ["#1F4E79", "#2F75B5", "#9DC3E6"]
 
@@ -639,12 +753,12 @@ if "result" in st.session_state:
 
     tabs = st.tabs([
         "Summary",
-        f"Baseline Only ({n_only_a:,})",
+        f"Source Only ({n_only_a:,})",
         f"Comparison Only ({n_only_b:,})",
         f"Matched ({n_matched:,})",
-        f"Differences ({n_changed:,})",
-        f"Baseline Dupes ({n_dup_a:,})",
-        f"Comparison Dupes ({n_dup_b:,})",
+        f"Changed Records ({n_changed:,})",
+        f"Source Duplicates ({n_dup_a:,})",
+        f"Comparison Duplicates ({n_dup_b:,})",
         "Data Quality Flags",
     ])
 
@@ -654,19 +768,19 @@ if "result" in st.session_state:
     with tabs[0]:
         st.dataframe(build_summary_df(result), use_container_width=True, hide_index=True)
 
-    # Tab 1: Baseline Only
+    # Tab 1: Source Only
     with tabs[1]:
         st.markdown(
             f"**{n_only_a:,} record(s)** whose match key appears in **{file_a_name}** "
             f"but has no corresponding entry in **{file_b_name}**. "
             "These may represent withdrawn entries, pending submissions, or records not yet "
-            "reflected in the comparison source."
+            "reflected in the comparison dataset."
         )
         if not result.only_in_a.empty:
             _show_df(result.only_in_a, key="only_a")
         else:
-            st.info("No baseline-only records found.")
-        _csv_download("Baseline Only Records", result.only_in_a, f"baseline_only_{ts}.csv")
+            st.info("No source-only records found.")
+        _csv_download("Source Only Records", result.only_in_a, f"source_only_{ts}.csv")
 
     # Tab 2: Comparison Only
     with tabs[2]:
@@ -674,7 +788,7 @@ if "result" in st.session_state:
             f"**{n_only_b:,} record(s)** whose match key appears in **{file_b_name}** "
             f"but has no corresponding entry in **{file_a_name}**. "
             "These may represent new submissions, late arrivals, or records not yet "
-            "posted to the baseline."
+            "posted to the source dataset."
         )
         if not result.only_in_b.empty:
             _show_df(result.only_in_b, key="only_b")
@@ -686,7 +800,7 @@ if "result" in st.session_state:
     with tabs[3]:
         st.markdown(
             f"**{n_matched:,} record(s)** with a matching key present in both datasets. "
-            "Columns prefixed **Baseline:** show values from the baseline dataset; "
+            "Columns prefixed **Source:** show values from the source dataset; "
             "columns prefixed **Comparison:** show values from the comparison dataset."
         )
         if not result.matched.empty:
@@ -695,7 +809,7 @@ if "result" in st.session_state:
             st.info("No matched records found.")
         _csv_download("Matched Records", result.matched, f"matched_{ts}.csv")
 
-    # Tab 4: Records with Differences
+    # Tab 4: Changed Records
     with tabs[4]:
         if not result.compare_cols_a:
             st.info(
@@ -710,10 +824,10 @@ if "result" in st.session_state:
         else:
             st.markdown(
                 f"**{n_changed:,} matched record(s)** where at least one compared field differs. "
-                "Each row shows the **Baseline** and **Comparison** values for every changed field."
+                "Each row shows the **Source** and **Comparison** values for every changed field."
             )
             _show_df(result.changed, key="changed")
-        _csv_download("Records with Differences", result.changed, f"records_with_differences_{ts}.csv")
+        _csv_download("Changed Records", result.changed, f"changed_records_{ts}.csv")
         if result.compare_parse_issues is not None and not result.compare_parse_issues.empty:
             with st.expander(
                 f"{len(result.compare_parse_issues)} parse warning(s): values that could not "
@@ -722,7 +836,7 @@ if "result" in st.session_state:
             ):
                 st.dataframe(result.compare_parse_issues, use_container_width=True, hide_index=True)
 
-    # Tab 5: Baseline Duplicates
+    # Tab 5: Source Duplicates
     with tabs[5]:
         st.markdown(
             f"**{n_dup_a:,} row(s)** in **{file_a_name}** that share a match key with at least "
@@ -733,9 +847,9 @@ if "result" in st.session_state:
         if not result.duplicates_a.empty:
             _show_df(result.duplicates_a, key="dup_a")
         else:
-            st.success("No duplicate identifiers detected in the Baseline Dataset.")
+            st.success("No duplicate identifiers detected in the Source Dataset.")
         _csv_download(
-            "Baseline Duplicate Identifiers", result.duplicates_a, f"baseline_duplicates_{ts}.csv"
+            "Source Duplicate Keys", result.duplicates_a, f"source_duplicates_{ts}.csv"
         )
 
     # Tab 6: Comparison Duplicates
@@ -751,7 +865,7 @@ if "result" in st.session_state:
         else:
             st.success("No duplicate identifiers detected in the Comparison Dataset.")
         _csv_download(
-            "Comparison Duplicates", result.duplicates_b, f"comparison_duplicates_{ts}.csv"
+            "Comparison Duplicate Keys", result.duplicates_b, f"comparison_duplicates_{ts}.csv"
         )
 
     # Tab 7: Data Quality Flags
@@ -762,7 +876,7 @@ if "result" in st.session_state:
         )
         dq_rows: list[dict] = []
         for _, row in result.blank_keys_a.iterrows():
-            dq_rows.append({"Dataset": "Baseline", "Filename": file_a_name,
+            dq_rows.append({"Dataset": "Source", "Filename": file_a_name,
                              "Flag": "Missing Identifier", **row.to_dict()})
         for _, row in result.blank_keys_b.iterrows():
             dq_rows.append({"Dataset": "Comparison", "Filename": file_b_name,
@@ -790,7 +904,13 @@ if "result" in st.session_state:
 
     with exp_col:
         with st.spinner("Building Excel workbook..."):
-            excel_bytes = export_to_excel(result, file_a_name, file_b_name)
+            excel_bytes = export_to_excel(
+                result,
+                file_a_name,
+                file_b_name,
+                prep_meta_a=st.session_state.get("prep_meta_a"),
+                prep_meta_b=st.session_state.get("prep_meta_b"),
+            )
 
         st.download_button(
             label="Download Excel Report",
@@ -805,14 +925,14 @@ if "result" in st.session_state:
             """
             The Excel workbook contains **11 tabs**:
             - **Executive Summary:** auto-generated plain-English briefing narrative
-            - **Analysis Metadata:** dataset names, sheets, record counts, key columns, timestamp
+            - **Analysis Metadata:** dataset names, sheets, record counts, key columns, timestamp, and data preparation settings
             - **Comparison Rules:** per-field comparison type, tolerance, and date precision settings
             - **Delta Counts:** flat count table suitable for pivot tables and downstream reporting
-            - **Baseline Only Records:** records present in the baseline but absent from comparison
-            - **Comparison Only Records:** records present in the comparison but absent from baseline
+            - **Source Only Records:** records present in the source but absent from comparison
+            - **Comparison Only Records:** records present in the comparison but absent from source
             - **Matched Records:** side-by-side view of all matched records
-            - **Records with Differences:** before/after values for every changed field
-            - **Baseline Duplicate Identifiers / Comparison Duplicates:** rows with non-unique match keys
+            - **Changed Records:** before/after values for every field-level difference
+            - **Source Duplicate Keys / Comparison Duplicate Keys:** rows with non-unique match keys
             - **Data Quality Flags:** rows excluded due to blank or null match key values
             """
         )
