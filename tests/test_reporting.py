@@ -141,7 +141,7 @@ REQUIRED_SHEETS = [
     "Matched Records",
     "Records with Differences",
     "Baseline Duplicate Identifiers",
-    "Comparison Duplicate Identifiers",
+    "Comparison Duplicates",
     "Data Quality Flags",
 ]
 
@@ -232,7 +232,7 @@ class TestExcelSheetNames:
 
     def test_comparison_duplicates_present(self):
         wb = self._load_wb()
-        assert "Comparison Duplicate Identifiers" in wb.sheetnames
+        assert "Comparison Duplicates" in wb.sheetnames
 
     def test_data_quality_flags_present(self):
         wb = self._load_wb()

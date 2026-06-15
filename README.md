@@ -124,7 +124,7 @@ Same format parsing as `date_only`, but time is included in the comparison. `202
 | Matched Records | Side-by-side view of all matched records (prefixed Baseline:/Comparison:) |
 | Records with Differences | Before/after values for every field-level difference |
 | Baseline Duplicate Identifiers | Rows sharing a match key with another row in the Baseline Dataset |
-| Comparison Duplicate Identifiers | Rows sharing a match key with another row in the Comparison Dataset |
+| Comparison Duplicates | Rows sharing a match key with another row in the Comparison Dataset |
 | Data Quality Flags | Rows excluded from reconciliation due to blank or null match key values |
 
 ---

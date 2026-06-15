@@ -49,7 +49,7 @@ _HEADER_COLORS = {
     "Matched Records":                  COLORS["navy"],
     "Records with Differences":         COLORS["amber"],
     "Baseline Duplicate Identifiers":   COLORS["orange"],
-    "Comparison Duplicate Identifiers": COLORS["orange"],
+    "Comparison Duplicates":            COLORS["orange"],
     "Data Quality Flags":               COLORS["purple"],
 }
 
@@ -58,7 +58,7 @@ _ROW_FILL_COLORS = {
     "Comparison Only Records":         COLORS["light_green"],
     "Records with Differences":        COLORS["light_amber"],
     "Baseline Duplicate Identifiers":  COLORS["light_amber"],
-    "Comparison Duplicate Identifiers":COLORS["light_amber"],
+    "Comparison Duplicates":           COLORS["light_amber"],
 }
 
 
@@ -85,7 +85,7 @@ def build_summary_df(result: DeltaResult) -> pd.DataFrame:
         ("Matched Records",                        n_matched,                 pct(n_matched, total_a)),
         ("Records with Differences",               len(result.changed),       pct(len(result.changed), n_matched) if n_matched else "N/A"),
         ("Baseline Duplicate Identifiers",         len(result.duplicates_a),  pct(len(result.duplicates_a), total_a)),
-        ("Comparison Duplicate Identifiers",       len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
+        ("Comparison Duplicates",                  len(result.duplicates_b),  pct(len(result.duplicates_b), total_b)),
         ("Baseline Missing Identifiers",           len(result.blank_keys_a),  pct(len(result.blank_keys_a), total_a)),
         ("Comparison Missing Identifiers",         len(result.blank_keys_b),  pct(len(result.blank_keys_b), total_b)),
     ]
@@ -156,7 +156,7 @@ def export_to_excel(
         _write_sheet(result.matched,      writer, "Matched Records")
         _write_sheet(result.changed,      writer, "Records with Differences")
         _write_sheet(result.duplicates_a, writer, "Baseline Duplicate Identifiers")
-        _write_sheet(result.duplicates_b, writer, "Comparison Duplicate Identifiers")
+        _write_sheet(result.duplicates_b, writer, "Comparison Duplicates")
         _write_sheet(dq_df,               writer, "Data Quality Flags")
 
     # Post-process: styling
@@ -302,7 +302,7 @@ def _build_delta_counts_df(result: DeltaResult) -> pd.DataFrame:
         {"Category": "Matched Records",                     "Count": len(result.matched),         "Source": "Both"},
         {"Category": "Records with Differences",            "Count": len(result.changed),         "Source": "Both"},
         {"Category": "Baseline Duplicate Identifiers",      "Count": len(result.duplicates_a),    "Source": "Baseline"},
-        {"Category": "Comparison Duplicate Identifiers",    "Count": len(result.duplicates_b),    "Source": "Comparison"},
+        {"Category": "Comparison Duplicates",               "Count": len(result.duplicates_b),    "Source": "Comparison"},
         {"Category": "Baseline Missing Identifiers",        "Count": len(result.blank_keys_a),    "Source": "Baseline"},
         {"Category": "Comparison Missing Identifiers",      "Count": len(result.blank_keys_b),    "Source": "Comparison"},
     ])

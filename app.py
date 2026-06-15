@@ -758,7 +758,7 @@ if "result" in st.session_state:
         else:
             st.success("No duplicate identifiers detected in the Comparison Dataset.")
         _csv_download(
-            "Comparison Duplicate Identifiers", result.duplicates_b, f"comparison_duplicates_{ts}.csv"
+            "Comparison Duplicates", result.duplicates_b, f"comparison_duplicates_{ts}.csv"
         )
 
     # Tab 7 — Data Quality Flags
@@ -819,7 +819,7 @@ if "result" in st.session_state:
             - **Comparison Only Records** — records present in the comparison but absent from baseline
             - **Matched Records** — side-by-side view of all matched records
             - **Records with Differences** — before/after values for every changed field
-            - **Baseline / Comparison Duplicate Identifiers** — rows with non-unique match keys
+            - **Baseline Duplicate Identifiers / Comparison Duplicates** — rows with non-unique match keys
             - **Data Quality Flags** — rows excluded due to blank or null match key values
             """
         )

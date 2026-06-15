@@ -42,7 +42,7 @@ REQUIRED_SHEETS = [
     "Matched Records",
     "Records with Differences",
     "Baseline Duplicate Identifiers",
-    "Comparison Duplicate Identifiers",
+    "Comparison Duplicates",
     "Data Quality Flags",
 ]
 
