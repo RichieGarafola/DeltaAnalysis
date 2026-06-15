@@ -44,7 +44,7 @@ class TestNormalizeKeyValue:
         assert normalize_key_value("99999.0") == "99999"
 
     def test_non_decimal_float_preserved(self):
-        # "12.5" is not an artifact — it's a real decimal
+        # "12.5" is not an artifact; it's a real decimal
         assert normalize_key_value("12.5") == "12.5"
 
     def test_whitespace_stripped(self):

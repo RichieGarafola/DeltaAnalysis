@@ -2,7 +2,7 @@
 Key normalization utilities.
 
 Ensures consistent comparison across datasets that may have
-inconsistent formatting — a common issue in government data exports.
+inconsistent formatting, a common issue in government data exports.
 """
 import math
 import pandas as pd

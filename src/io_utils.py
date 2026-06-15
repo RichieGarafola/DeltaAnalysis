@@ -92,7 +92,7 @@ def read_uploaded_file(uploaded_file, sheet_name=None) -> pd.DataFrame:
     # Strip whitespace from column headers
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Reject duplicate column names — they cause ambiguous merges
+    # Reject duplicate column names (they cause ambiguous merges)
     dupes = df.columns[df.columns.duplicated()].tolist()
     if dupes:
         raise ValueError(
@@ -109,9 +109,9 @@ def check_file_size(n_rows: int) -> Tuple[str, str]:
 
     Returns
     -------
-    ('ok',   '')                           — under warn threshold
-    ('warn', human-readable message)       — between warn and hard threshold
-    ('hard', human-readable message)       — at or above hard threshold
+    ('ok',   '')                           - under warn threshold
+    ('warn', human-readable message)       - between warn and hard threshold
+    ('hard', human-readable message)       - at or above hard threshold
     """
     if n_rows >= LARGE_FILE_HARD_ROWS:
         return (

@@ -1,5 +1,5 @@
 """
-Tests for src/io_utils.py — sheet names, file reading, size checks, display frames.
+Tests for src/io_utils.py: sheet names, file reading, size checks, display frames.
 """
 import io
 

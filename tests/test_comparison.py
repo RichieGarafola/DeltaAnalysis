@@ -1,5 +1,5 @@
 """
-Tests for src/comparison.py — parse_numeric, parse_date_value, parse_datetime_value,
+Tests for src/comparison.py: parse_numeric, parse_date_value, parse_datetime_value,
 compare_field_values (including date_only and datetime_precision modes).
 """
 import pytest
