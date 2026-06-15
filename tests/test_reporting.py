@@ -1,5 +1,5 @@
 """
-Tests for src/reporting.py — build_summary_df, build_change_frequency,
+Tests for src/reporting.py: build_summary_df, build_change_frequency,
 export_to_excel (sheet names, metadata content, rules content).
 """
 import io
@@ -75,19 +75,19 @@ class TestBuildSummaryDf:
     def test_total_a_correct(self):
         result = _make_result()
         df = build_summary_df(result)
-        row = df[df["Metric"] == "Baseline Dataset — Total Records"]
+        row = df[df["Metric"] == "Baseline Dataset: Total Records"]
         assert int(row["Count"].iloc[0]) == result.total_a
 
     def test_total_b_correct(self):
         result = _make_result()
         df = build_summary_df(result)
-        row = df[df["Metric"] == "Comparison Dataset — Total Records"]
+        row = df[df["Metric"] == "Comparison Dataset: Total Records"]
         assert int(row["Count"].iloc[0]) == result.total_b
 
     def test_zero_total_b_returns_na_percentages(self):
         df_a = pd.DataFrame({"id": ["X"], "v": ["1"]})
         df_b = pd.DataFrame({"id": pd.Series([], dtype=str), "v": pd.Series([], dtype=str)})
-        # Empty file B is valid input — engine should not raise
+        # Empty file B is valid input; engine should not raise
         result = run_delta(df_a, df_b, ["id"], ["id"])
         df = build_summary_df(result)
         # B-denominator rows should produce "N/A", not a crash
@@ -128,7 +128,7 @@ class TestBuildChangeFrequency:
 
 
 # ---------------------------------------------------------------------------
-# export_to_excel — sheet names
+# export_to_excel: sheet names
 # ---------------------------------------------------------------------------
 
 REQUIRED_SHEETS = [

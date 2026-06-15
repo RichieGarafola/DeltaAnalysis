@@ -41,7 +41,7 @@ def parse_numeric(value) -> Tuple[Optional[float], bool]:
     parenthesised negatives like (1,000.00), and leading/trailing whitespace.
 
     Returns (float_value, True) on success, (None, False) on failure.
-    Blank / NaN strings return (None, True) — treated as missing, not invalid.
+    Blank / NaN strings return (None, True) - treated as missing, not invalid.
     """
     if value is None:
         return None, True
@@ -92,7 +92,7 @@ def parse_date_value(value) -> Tuple[Optional[date], bool]:
     Used by date_only comparison mode.
 
     Returns (date_object, True) on success, (None, False) on failure.
-    Blank / NaN strings return (None, True) — missing, not invalid.
+    Blank / NaN strings return (None, True) - missing, not invalid.
     """
     if value is None:
         return None, True
@@ -128,7 +128,7 @@ def parse_datetime_value(value) -> Tuple[Optional[datetime], bool]:
     time part are treated as midnight (00:00:00).
 
     Returns (datetime_object, True) on success, (None, False) on failure.
-    Blank / NaN strings return (None, True) — missing, not invalid.
+    Blank / NaN strings return (None, True) - missing, not invalid.
     """
     if value is None:
         return None, True

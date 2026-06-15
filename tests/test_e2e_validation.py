@@ -1,5 +1,5 @@
 """
-End-to-end validation suite — v1.1 RC1.
+End-to-end validation suite - v1.1 RC1.
 
 Tests every scenario specified in the RC1 validation checklist:
   - CSV vs CSV
@@ -80,7 +80,7 @@ def _wb_from_result(result, a="A.csv", b="B.csv"):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 1 — CSV vs CSV
+# Scenario 1: CSV vs CSV
 # ---------------------------------------------------------------------------
 
 class TestCsvVsCsv:
@@ -126,7 +126,7 @@ class TestCsvVsCsv:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2 — Excel vs Excel (single-sheet)
+# Scenario 2: Excel vs Excel (single-sheet)
 # ---------------------------------------------------------------------------
 
 class TestExcelVsExcel:
@@ -153,7 +153,7 @@ class TestExcelVsExcel:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 3 — Multi-sheet Excel
+# Scenario 3: Multi-sheet Excel
 # ---------------------------------------------------------------------------
 
 class TestMultiSheetExcel:
@@ -194,7 +194,7 @@ class TestMultiSheetExcel:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 4 — Numeric tolerance comparison
+# Scenario 4: Numeric tolerance comparison
 # ---------------------------------------------------------------------------
 
 class TestNumericTolerance:
@@ -210,7 +210,7 @@ class TestNumericTolerance:
 
     def test_currency_symbols_stripped(self):
         r = self._run(tol=0.0)
-        # N1: $1,000.00 == 1000.00 after stripping — must NOT appear in changed
+        # N1: $1,000.00 == 1000.00 after stripping; must NOT appear in changed
         # N2 and N3 differ in value, so they should be flagged
         changed_keys = r.changed["Key: id"].tolist() if not r.changed.empty else []
         assert "N1" not in changed_keys
@@ -244,7 +244,7 @@ class TestNumericTolerance:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 5 — Date-only comparison
+# Scenario 5: Date-only comparison
 # ---------------------------------------------------------------------------
 
 class TestDateOnlyComparison:
@@ -279,7 +279,7 @@ class TestDateOnlyComparison:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6 — Datetime precision comparison
+# Scenario 6: Datetime precision comparison
 # ---------------------------------------------------------------------------
 
 class TestDatetimePrecisionComparison:
@@ -307,7 +307,7 @@ class TestDatetimePrecisionComparison:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 7 — Full workbook verification
+# Scenario 7: Full workbook verification
 # ---------------------------------------------------------------------------
 
 class TestWorkbookVerification:
@@ -429,12 +429,12 @@ class TestWorkbookVerification:
         r = self._full_result()
         assert not r.changed.empty
         cols = r.changed.columns.tolist()
-        assert any("— Baseline" in c for c in cols)
-        assert any("— Comparison" in c for c in cols)
+        assert any("- Baseline" in c for c in cols)
+        assert any("- Comparison" in c for c in cols)
 
 
 # ---------------------------------------------------------------------------
-# Scenario 8 — App startup import check
+# Scenario 8: App startup import check
 # ---------------------------------------------------------------------------
 
 class TestAppImports:

@@ -89,8 +89,8 @@ class TestChangedRecords:
         # Only C002 has changes
         assert len(result.changed) == 1
         row = result.changed.iloc[0]
-        assert row["status — Baseline"] == "Pending"
-        assert row["status — Comparison"] == "Approved"
+        assert row["status - Baseline"] == "Pending"
+        assert row["status - Comparison"] == "Approved"
 
     def test_no_changes_when_identical(self):
         df = _make_df([{"id": "X1", "v": "same"}, {"id": "X2", "v": "also_same"}])
@@ -117,8 +117,8 @@ class TestChangedRecords:
         )
         row = result.changed.iloc[0]
         # Both status and amount changed for C002
-        assert "status — Baseline" in result.changed.columns
-        assert "amount — Baseline" in result.changed.columns
+        assert "status - Baseline" in result.changed.columns
+        assert "amount - Baseline" in result.changed.columns
 
 
 # ---------------------------------------------------------------------------

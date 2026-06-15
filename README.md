@@ -1,6 +1,6 @@
 # Delta Analysis Tool
 
-> Bidirectional dataset reconciliation for government analysts — generates auditable, briefing-ready comparison reports from two CSV or Excel files.
+> Bidirectional dataset reconciliation for government analysts. Generates auditable, briefing-ready comparison reports from two CSV or Excel files.
 
 [![Tests](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml/badge.svg)](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml)
 
@@ -14,11 +14,11 @@ Government data workflows routinely generate two versions of the same dataset: l
 
 Typical scenarios:
 
-- **DFAS receipt reconciliation** — match invoices by contract number; flag obligation amount or status changes
-- **M&RA package tracking** — compare weekly extracts; surface new submissions and status deltas between periods
-- **Duplicate submission review** — identify records where the same identifier appears multiple times in the same file
-- **Operational reporting** — produce a leadership-ready delta between two reporting periods
-- **Audit support** — every result category is traceable to its source rows; the Excel export is self-contained and shareable with oversight stakeholders
+- **DFAS receipt reconciliation:** match invoices by contract number; flag obligation amount or status changes
+- **M&RA package tracking:** compare weekly extracts; surface new submissions and status deltas between periods
+- **Duplicate submission review:** identify records where the same identifier appears multiple times in the same file
+- **Operational reporting:** produce a leadership-ready delta between two reporting periods
+- **Audit support:** every result category is traceable to its source rows; the Excel export is self-contained and shareable with oversight stakeholders
 
 ---
 
@@ -31,7 +31,7 @@ Typical scenarios:
 | Numeric tolerance | Strips currency symbols ($, £, €), commas, and parenthesised negatives; configurable tolerance per field |
 | Date-aware comparison | Parses ISO and US date formats; `date_only` mode ignores time; `datetime_precision` mode preserves time |
 | Large-file safeguards | Warning banner at 100,000 rows; confirmation gate at 500,000 rows; table previews capped at 1,000 rows |
-| Executive Summary | Auto-generated plain-English briefing narrative — every number is derived from the actual results |
+| Executive Summary | Auto-generated plain-English briefing narrative (every number is derived from the actual results) |
 | 11-tab Excel workbook | Audit-ready export with metadata, comparison rules, delta counts, and per-category data tabs |
 | 177-test suite | Covers normalization, comparison logic, I/O utilities, reporting, and end-to-end scenarios |
 
@@ -39,14 +39,14 @@ Typical scenarios:
 
 ## Installation
 
-### 1 — Clone the repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/RichieGarafola/DeltaAnalysis.git
 cd DeltaAnalysis
 ```
 
-### 2 — Create a virtual environment
+### 2. Create a virtual environment
 
 ```bash
 python -m venv .venv
@@ -58,7 +58,7 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3 — Install dependencies
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -80,7 +80,7 @@ Opens at `http://localhost:8501`. No configuration file required.
 
 1. Upload the **Baseline Dataset** (prior period, source of record, or authoritative extract)
 2. Upload the **Comparison Dataset** (current period, received file, or updated extract)
-3. Select the **match key column(s)** from each dataset — these uniquely identify each record (e.g., Contract Number, Case ID)
+3. Select the **match key column(s)** from each dataset (these uniquely identify each record, e.g., Contract Number, Case ID)
 4. Select **comparison fields** to diff across matched records (e.g., obligation amount, status, date)
 5. Optionally expand **Advanced Comparison Settings** to assign numeric tolerance or date precision per field
 6. Click **Run Delta Analysis**
@@ -96,10 +96,10 @@ All fields default to exact text comparison after whitespace normalization. Lead
 ### Numeric
 Strips currency symbols (`$`, `£`, `€`, `¥`), commas, and parenthesised negatives `(1,500.00)` before comparing. A configurable tolerance allows small rounding differences to be treated as equal.
 
-### Date — `date_only`
-Parses both ISO (`YYYY-MM-DD`) and US (`MM/DD/YYYY`) formats, then compares calendar date only. The time component is ignored — `2024-01-15 08:30` and `01/15/2024 23:59` are treated as equal.
+### Date: `date_only`
+Parses both ISO (`YYYY-MM-DD`) and US (`MM/DD/YYYY`) formats, then compares calendar date only. The time component is ignored; `2024-01-15 08:30` and `01/15/2024 23:59` are treated as equal.
 
-### Date — `datetime_precision`
+### Date: `datetime_precision`
 Same format parsing as `date_only`, but time is included in the comparison. `2024-01-15 08:30` and `2024-01-15 14:00` are treated as different.
 
 ---
@@ -107,9 +107,9 @@ Same format parsing as `date_only`, but time is included in the comparison. `202
 ## Report Outputs
 
 ### Interactive Dashboard
-- **10 KPI cards** — totals, baseline-only, comparison-only, matched, records with differences, duplicates, missing identifiers
-- **3 Plotly charts** — Reconciliation Summary bar chart, Match Coverage donut, Field-Level Differences frequency
-- **8 tabbed result tables** — each with a per-category CSV download
+- **10 KPI cards:** totals, baseline-only, comparison-only, matched, records with differences, duplicates, missing identifiers
+- **3 Plotly charts:** Reconciliation Summary bar chart, Match Coverage donut, Field-Level Differences frequency
+- **8 tabbed result tables:** each with a per-category CSV download
 
 ### Excel Workbook (11 tabs)
 
@@ -138,9 +138,9 @@ Two scenarios are included to demonstrate the tool without uploading real data.
 Exercises every delta category in a small, purpose-built dataset.
 
 ```
-sample_data/file_a.csv  — 6 rows (1 matched-unchanged, 1 matched-changed,
+sample_data/file_a.csv  - 6 rows (1 matched-unchanged, 1 matched-changed,
                            1 baseline-only, 1 duplicate key pair, 1 blank key)
-sample_data/file_b.csv  — 4 rows (corresponding comparison data)
+sample_data/file_b.csv  - 4 rows (corresponding comparison data)
 ```
 
 Recommended settings:
@@ -154,15 +154,15 @@ Expected results:
 | Baseline Only Records | 1 (R003) |
 | Comparison Only Records | 1 (R005) |
 | Matched Records | 3 (R001, R002, R004) |
-| Records with Differences | 1 (R002 — Status and Amount changed) |
+| Records with Differences | 1 (R002, Status and Amount changed) |
 | Baseline Duplicate Identifiers | 2 (both R004 rows flagged) |
 | Data Quality Flags | 1 (blank key row) |
 
 ### Full contracting dataset (`sample_a.csv` / `sample_b.csv`)
 
 ```
-sample_data/sample_a.csv  — 11-row baseline (includes 1 duplicate, 1 blank key)
-sample_data/sample_b.csv  — 10-row comparison (changed fields, new entries)
+sample_data/sample_a.csv  - 11-row baseline (includes 1 duplicate, 1 blank key)
+sample_data/sample_b.csv  - 10-row comparison (changed fields, new entries)
 ```
 
 Recommended settings:
@@ -191,7 +191,7 @@ pytest tests/ --cov=src --cov-report=term-missing
 
 ```
 DeltaAnalysis/
-├── app.py                      # Streamlit UI — main entry point
+├── app.py                      # Streamlit UI - main entry point
 ├── requirements.txt
 ├── README.md
 ├── .gitignore
@@ -207,14 +207,14 @@ DeltaAnalysis/
 │   └── reporting.py            # 11-tab Excel export with Executive Summary narrative
 ├── tests/
 │   ├── __init__.py
-│   ├── test_normalization.py   # 21 unit tests — key normalization
-│   ├── test_delta_engine.py    # 26 unit tests — comparison categories and validation
-│   ├── test_comparison.py      # 47 unit tests — numeric, date, and field-level comparison
-│   ├── test_io_utils.py        # 24 unit tests — file parsing, sheet selection, size checks
-│   └── test_e2e_validation.py  # 59 integration tests — full workbook and scenario coverage
+│   ├── test_normalization.py   # 21 unit tests - key normalization
+│   ├── test_delta_engine.py    # 26 unit tests - comparison categories and validation
+│   ├── test_comparison.py      # 47 unit tests - numeric, date, and field-level comparison
+│   ├── test_io_utils.py        # 24 unit tests - file parsing, sheet selection, size checks
+│   └── test_e2e_validation.py  # 59 integration tests - full workbook and scenario coverage
 └── sample_data/
-    ├── file_a.csv              # Minimal demo — one of each delta category
-    ├── file_b.csv              # Minimal demo — comparison side
+    ├── file_a.csv              # Minimal demo - one of each delta category
+    ├── file_b.csv              # Minimal demo - comparison side
     ├── sample_a.csv            # Full contracting dataset (11-row baseline)
     └── sample_b.csv            # Full contracting dataset (10-row comparison)
 ```
@@ -223,13 +223,13 @@ DeltaAnalysis/
 
 ## Architecture Overview
 
-**`DeltaResult` dataclass** is the central output container. `run_delta()` accepts two DataFrames and produces a fully populated `DeltaResult` in a single call — no intermediate state, no side effects. Every downstream consumer (the UI, the Excel exporter, the test suite) works exclusively from this object.
+**`DeltaResult` dataclass** is the central output container. `run_delta()` accepts two DataFrames and produces a fully populated `DeltaResult` in a single call (no intermediate state, no side effects). Every downstream consumer (the UI, the Excel exporter, the test suite) works exclusively from this object.
 
-**All data is read as strings.** This prevents silent type coercion — a common source of false mismatches when Excel stores numeric IDs (e.g., `1001` read as `1001.0`). Numeric and date parsing is performed explicitly only when the user selects a typed comparison field.
+**All data is read as strings.** This prevents silent type coercion, a common source of false mismatches when Excel stores numeric IDs (e.g., `1001` read as `1001.0`). Numeric and date parsing is performed explicitly only when the user selects a typed comparison field.
 
 **Composite key support.** Multiple match key columns are concatenated with a `||` separator into a single match key before comparison, preventing collisions between single-column values that happen to share parts.
 
-**Blank keys are quarantined, not silently dropped.** Rows with null or empty key values are captured in the Data Quality Flags category so analysts see exactly what was excluded and why — a requirement for audit-traceable outputs.
+**Blank keys are quarantined, not silently dropped.** Rows with null or empty key values are captured in the Data Quality Flags category so analysts see exactly what was excluded and why, a requirement for audit-traceable outputs.
 
 **Duplicates use first-occurrence for matching.** All duplicate rows are surfaced in the Duplicate Identifiers tabs; only the first occurrence participates in matching, keeping totals predictable.
 
@@ -239,7 +239,7 @@ DeltaAnalysis/
 
 **Type-grouped Advanced Comparison Settings.** Rather than creating per-field widgets (which becomes unusable at 20+ fields), the UI groups fields by type: one multiselect for numeric fields, one for date fields, shared tolerance and date-mode inputs. This scales to arbitrarily wide datasets.
 
-**`comparison_rules` backward compatibility.** When no rules are provided, the engine defaults to text comparison for all fields — identical behavior to v1.0. Existing integrations and tests continue to work without modification.
+**`comparison_rules` backward compatibility.** When no rules are provided, the engine defaults to text comparison for all fields, identical behavior to v1.0. Existing integrations and tests continue to work without modification.
 
 **Executive Summary is fully data-driven.** Every statistic in the narrative is interpolated directly from `DeltaResult` at export time. Analysts do not need to edit the narrative before sharing it with leadership.
 

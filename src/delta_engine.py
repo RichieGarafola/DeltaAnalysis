@@ -40,7 +40,7 @@ class DeltaResult:
     total_a: int                   # Original row count before any filtering
     total_b: int
 
-    # v1.1 additions — optional, with defaults for backward compatibility
+    # v1.1 additions: optional, with defaults for backward compatibility
     comparison_rules: List[dict] = field(default_factory=list)
     sheet_a: Optional[str] = None
     sheet_b: Optional[str] = None
@@ -69,7 +69,7 @@ def run_delta(
     ----------
     df_a, df_b           : Source DataFrames (read as strings recommended)
     key_cols_a/b         : Columns that uniquely identify a record in each file.
-                           Matched positionally — first col in A pairs with
+                           Matched positionally; first col in A pairs with
                            first col in B, etc.
     compare_cols_a/b     : Non-key columns to diff for changes.
                            Must be the same length; compared positionally.
@@ -220,7 +220,7 @@ def _normalise_rules(
     Return a validated rule list.
 
     If comparison_rules is None or empty, build a default text rule for each
-    column pair — preserving v1.0 behaviour unchanged.
+    column pair, preserving v1.0 behaviour unchanged.
     """
     if comparison_rules:
         return comparison_rules
@@ -291,8 +291,8 @@ def _find_changed(
             for kc in key_cols_a:
                 record[f"Key: {kc}"] = row_a.get(kc, "")
             for col, (before, after) in diffs.items():
-                record[f"{col} — Baseline"] = before
-                record[f"{col} — Comparison"] = after
+                record[f"{col} - Baseline"] = before
+                record[f"{col} - Comparison"] = after
             rows.append(record)
 
     changed_df = pd.DataFrame(rows) if rows else pd.DataFrame()

@@ -25,18 +25,12 @@ from src.delta_engine import DeltaResult
 
 COLORS = {
     "navy":        "1F4E79",
-    "dark_red":    "C00000",
-    "dark_green":  "375623",
-    "amber":       "7B3F00",
-    "orange":      "843C0C",
-    "purple":      "403152",
+    "med_blue":    "2F75B5",
+    "light_blue":  "9DC3E6",
+    "pale_blue":   "D9EAF7",
     "slate":       "44546A",
-    "light_blue":  "BDD7EE",
-    "light_red":   "FCE4D6",
-    "light_green": "E2EFDA",
-    "light_amber": "FFF2CC",
-    "white":       "FFFFFF",
     "light_gray":  "F2F2F2",
+    "white":       "FFFFFF",
 }
 
 _HEADER_COLORS = {
@@ -44,21 +38,21 @@ _HEADER_COLORS = {
     "Analysis Metadata":                COLORS["slate"],
     "Comparison Rules":                 COLORS["slate"],
     "Delta Counts":                     COLORS["navy"],
-    "Baseline Only Records":            COLORS["dark_red"],
-    "Comparison Only Records":          COLORS["dark_green"],
+    "Baseline Only Records":            COLORS["navy"],
+    "Comparison Only Records":          COLORS["med_blue"],
     "Matched Records":                  COLORS["navy"],
-    "Records with Differences":         COLORS["amber"],
-    "Baseline Duplicate Identifiers":   COLORS["orange"],
-    "Comparison Duplicates":            COLORS["orange"],
-    "Data Quality Flags":               COLORS["purple"],
+    "Records with Differences":         COLORS["med_blue"],
+    "Baseline Duplicate Identifiers":   COLORS["slate"],
+    "Comparison Duplicates":            COLORS["slate"],
+    "Data Quality Flags":               COLORS["slate"],
 }
 
 _ROW_FILL_COLORS = {
-    "Baseline Only Records":           COLORS["light_red"],
-    "Comparison Only Records":         COLORS["light_green"],
-    "Records with Differences":        COLORS["light_amber"],
-    "Baseline Duplicate Identifiers":  COLORS["light_amber"],
-    "Comparison Duplicates":           COLORS["light_amber"],
+    "Baseline Only Records":            COLORS["pale_blue"],
+    "Comparison Only Records":          COLORS["pale_blue"],
+    "Records with Differences":         COLORS["pale_blue"],
+    "Baseline Duplicate Identifiers":   COLORS["light_gray"],
+    "Comparison Duplicates":            COLORS["light_gray"],
 }
 
 
@@ -78,8 +72,8 @@ def build_summary_df(result: DeltaResult) -> pd.DataFrame:
         return f"{n / denom * 100:.1f}%"
 
     rows = [
-        ("Baseline Dataset — Total Records",       total_a,                   ""),
-        ("Comparison Dataset — Total Records",     total_b,                   ""),
+        ("Baseline Dataset: Total Records",        total_a,                   ""),
+        ("Comparison Dataset: Total Records",      total_b,                   ""),
         ("Baseline Only Records",                  len(result.only_in_a),     pct(len(result.only_in_a), total_a)),
         ("Comparison Only Records",                len(result.only_in_b),     pct(len(result.only_in_b), total_b)),
         ("Matched Records",                        n_matched,                 pct(n_matched, total_a)),
@@ -104,8 +98,8 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
 
     rows = []
     for col in result.compare_cols_a:
-        a_col = f"{col} — Baseline"
-        b_col = f"{col} — Comparison"
+        a_col = f"{col} - Baseline"
+        b_col = f"{col} - Comparison"
         if a_col in result.changed.columns and b_col in result.changed.columns:
             n_changed = (result.changed[a_col] != result.changed[b_col]).sum()
             rows.append({"Field": col, "Changes": int(n_changed)})
@@ -134,7 +128,7 @@ def export_to_excel(
     narrative    = _build_narrative(result, file_a_name, file_b_name, run_timestamp)
     delta_counts = _build_delta_counts_df(result)
 
-    # Data Quality Flags — rows excluded due to missing match key identifiers
+    # Data Quality Flags: rows excluded due to missing match key identifiers
     dq_rows: list[dict] = []
     for _, row in result.blank_keys_a.iterrows():
         dq_rows.append({"Dataset": "Baseline", "Filename": file_a_name, "Flag": "Missing Identifier", **row.to_dict()})
@@ -210,10 +204,10 @@ def _build_narrative(
         f"Of the {total_a:,} baseline records, {n_matched:,} ({pct(n_matched, total_a)}) were "
         f"matched to a corresponding record in the comparison dataset. "
         f"{n_only_a:,} records ({pct(n_only_a, total_a)} of baseline) appear exclusively in "
-        f"{file_a_name} and are absent from the comparison dataset — these may represent "
+        f"{file_a_name} and are absent from the comparison dataset; these may represent "
         f"withdrawn entries, pending submissions, or records not yet reflected in the comparison source. "
         f"{n_only_b:,} records ({pct(n_only_b, total_b)} of comparison) appear exclusively in "
-        f"{file_b_name} and have no corresponding baseline entry — these may represent new "
+        f"{file_b_name} and have no corresponding baseline entry; these may represent new "
         f"submissions, late arrivals, or records not yet posted to the baseline."
     )
 
@@ -268,13 +262,13 @@ def _build_narrative(
 
     recommendation = (
         f"Priority actions: "
-        f"(1) Investigate {n_only_a:,} baseline-only record(s) — confirm whether these represent "
+        f"(1) Investigate {n_only_a:,} baseline-only record(s): confirm whether these represent "
         f"intentional removals, pending resubmissions, or data feed gaps. "
         f"(2) Validate {n_only_b:,} comparison-only record(s) against the authoritative source "
         f"of record before accepting as new entries. "
         f"(3) Review {n_changed:,} record(s) with field-level differences to determine whether "
         f"changes reflect authorized updates or require correction. "
-        f"(4) Resolve all data quality flags — duplicate identifiers and missing key values — "
+        f"(4) Resolve all data quality flags (duplicate identifiers and missing key values) "
         f"at the source system level."
     )
 
@@ -295,8 +289,8 @@ def _build_narrative(
 def _build_delta_counts_df(result: DeltaResult) -> pd.DataFrame:
     """Flat reconciliation count table suitable for pivot tables and downstream reporting."""
     return pd.DataFrame([
-        {"Category": "Baseline Dataset — Total Records",    "Count": result.total_a,              "Source": "Baseline"},
-        {"Category": "Comparison Dataset — Total Records",  "Count": result.total_b,              "Source": "Comparison"},
+        {"Category": "Baseline Dataset: Total Records",    "Count": result.total_a,              "Source": "Baseline"},
+        {"Category": "Comparison Dataset: Total Records",  "Count": result.total_b,              "Source": "Comparison"},
         {"Category": "Baseline Only Records",               "Count": len(result.only_in_a),       "Source": "Baseline"},
         {"Category": "Comparison Only Records",             "Count": len(result.only_in_b),       "Source": "Comparison"},
         {"Category": "Matched Records",                     "Count": len(result.matched),         "Source": "Both"},
