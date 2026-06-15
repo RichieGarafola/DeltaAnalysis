@@ -70,11 +70,11 @@ class TestMatchedRecords:
     def test_matched_has_prefixed_columns(self, base_a, base_b):
         result = run_delta(base_a, base_b, ["id"], ["id"])
         for col in result.matched.columns:
-            assert col.startswith("Baseline: ") or col.startswith("Comparison: ")
+            assert col.startswith("Source: ") or col.startswith("Comparison: ")
 
     def test_matched_includes_both_sides(self, base_a, base_b):
         result = run_delta(base_a, base_b, ["id"], ["id"])
-        assert "Baseline: id" in result.matched.columns
+        assert "Source: id" in result.matched.columns
         assert "Comparison: id" in result.matched.columns
 
 
@@ -89,7 +89,7 @@ class TestChangedRecords:
         # Only C002 has changes
         assert len(result.changed) == 1
         row = result.changed.iloc[0]
-        assert row["status - Baseline"] == "Pending"
+        assert row["status - Source"] == "Pending"
         assert row["status - Comparison"] == "Approved"
 
     def test_no_changes_when_identical(self):
@@ -117,8 +117,8 @@ class TestChangedRecords:
         )
         row = result.changed.iloc[0]
         # Both status and amount changed for C002
-        assert "status - Baseline" in result.changed.columns
-        assert "amount - Baseline" in result.changed.columns
+        assert "status - Source" in result.changed.columns
+        assert "amount - Source" in result.changed.columns
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ class TestCompositeKeys:
 
 class TestValidation:
     def test_missing_key_column_raises(self, base_a, base_b):
-        with pytest.raises(ValueError, match="not found in Baseline Dataset"):
+        with pytest.raises(ValueError, match="not found in Source Dataset"):
             run_delta(base_a, base_b, ["nonexistent"], ["id"])
 
     def test_mismatched_key_column_counts_raises(self, base_a, base_b):
