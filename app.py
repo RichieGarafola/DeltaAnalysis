@@ -68,6 +68,26 @@ st.markdown(
             border: 1px solid #dce4ef;
             border-radius: 6px;
         }
+        .footer-primary {
+            text-align: center;
+            font-size: 0.92rem;
+            font-weight: 600;
+            color: #1F4E79;
+            margin-bottom: 0.2rem;
+        }
+        .footer-secondary {
+            text-align: center;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #44546A;
+            margin-bottom: 0.2rem;
+        }
+        .footer-tertiary {
+            text-align: center;
+            font-size: 0.74rem;
+            font-weight: 400;
+            color: #888;
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -972,9 +992,14 @@ if "result" in st.session_state:
 
 st.divider()
 st.markdown(
-    "<div style='text-align:center; color:#888; font-size:0.8rem;'>"
-    "Delta Analysis Tool &nbsp;|&nbsp; Streamlit + Pandas + Plotly &nbsp;|&nbsp; "
-    f"{datetime.now().strftime('%Y-%m-%d')}"
+    "<div class='footer-primary'>"
+    "Delta Analysis Tool &nbsp;|&nbsp; Operational Analytics and Reconciliation Platform"
+    " &nbsp;|&nbsp; Version 1.2.0"
+    "</div>"
+    "<div class='footer-secondary'>Designed and Developed by Richie Garafola</div>"
+    "<div class='footer-tertiary'>"
+    "Supports CSV and Excel comparison, multi-sheet workbooks, numeric tolerance matching,"
+    " date-aware comparisons, and audit-ready reporting."
     "</div>",
     unsafe_allow_html=True,
 )
