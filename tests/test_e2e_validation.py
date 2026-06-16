@@ -37,12 +37,12 @@ REQUIRED_SHEETS = [
     "Analysis Metadata",
     "Comparison Rules",
     "Delta Counts",
-    "Baseline Only Records",
+    "Source Only Records",
     "Comparison Only Records",
     "Matched Records",
-    "Records with Differences",
-    "Baseline Duplicate Identifiers",
-    "Comparison Duplicates",
+    "Changed Records",
+    "Source Duplicate Keys",
+    "Comparison Duplicate Keys",
     "Data Quality Flags",
 ]
 
@@ -149,7 +149,7 @@ class TestExcelVsExcel:
 
     def test_workbook_valid(self):
         wb, _ = _wb_from_result(self._run(), "a.xlsx", "b.xlsx")
-        assert "Records with Differences" in wb.sheetnames
+        assert "Changed Records" in wb.sheetnames
 
 
 # ---------------------------------------------------------------------------
@@ -349,8 +349,10 @@ class TestWorkbookVerification:
         r = self._full_result()
         wb, _ = _wb_from_result(r)
         for legacy in ("Summary", "Only in File A", "Only in File B",
-                       "Changed Records", "Duplicate Keys File A",
-                       "Duplicate Keys File B", "Data Quality Issues"):
+                       "Records with Differences", "Duplicate Keys File A",
+                       "Duplicate Keys File B", "Data Quality Issues",
+                       "Baseline Only Records", "Baseline Duplicate Identifiers",
+                       "Comparison Duplicates"):
             assert legacy not in wb.sheetnames, f"Legacy sheet still present: '{legacy}'"
 
     def test_exactly_11_sheets(self):
@@ -373,11 +375,11 @@ class TestWorkbookVerification:
         wb, _ = _wb_from_result(r, "a.xlsx", "b.xlsx")
         ws = wb["Analysis Metadata"]
         params = [str(ws.cell(row=i, column=1).value) for i in range(2, ws.max_row + 1)]
-        assert "Baseline Dataset" in params
+        assert "Source Dataset" in params
         assert "Comparison Dataset" in params
-        assert "Baseline Sheet / Tab" in params
+        assert "Source Sheet / Tab" in params
         assert "Comparison Sheet / Tab" in params
-        assert "Match Key Fields (Baseline)" in params
+        assert "Match Key Fields (Source)" in params
         assert "Comparison Rules Applied" in params
 
     def test_comparison_rules_tab_has_three_rules(self):
@@ -401,13 +403,13 @@ class TestWorkbookVerification:
         wb, _ = _wb_from_result(r)
         ws = wb["Delta Counts"]
         categories = [str(ws.cell(row=i, column=1).value) for i in range(2, ws.max_row + 1)]
-        assert any("Baseline Only Records" in c for c in categories)
-        assert any("Records with Differences" in c for c in categories)
+        assert any("Source Only Records" in c for c in categories)
+        assert any("Changed Records" in c for c in categories)
 
-    def test_baseline_duplicate_identifiers_tab_has_data(self):
+    def test_source_duplicate_keys_tab_has_data(self):
         r = self._full_result()
         wb, _ = _wb_from_result(r)
-        ws = wb["Baseline Duplicate Identifiers"]
+        ws = wb["Source Duplicate Keys"]
         # W4 appears twice → dup rows present
         assert ws.max_row >= 2
 
@@ -429,7 +431,7 @@ class TestWorkbookVerification:
         r = self._full_result()
         assert not r.changed.empty
         cols = r.changed.columns.tolist()
-        assert any("- Baseline" in c for c in cols)
+        assert any("- Source" in c for c in cols)
         assert any("- Comparison" in c for c in cols)
 
 

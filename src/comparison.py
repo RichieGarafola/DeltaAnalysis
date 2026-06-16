@@ -170,7 +170,7 @@ def compare_field_values(
 
     Parameters
     ----------
-    val_a, val_b : Raw values from the Baseline and Comparison datasets.
+    val_a, val_b : Raw values from the Source and Comparison datasets.
     rule         : Dict with keys:
                    - type       : 'text' | 'numeric' | 'date'  (default 'text')
                    - tolerance  : float, used when type == 'numeric'
@@ -182,7 +182,7 @@ def compare_field_values(
     (is_equal, str_a, str_b, issue_note)
 
     is_equal    : True if the values are considered equal under the rule
-    str_a       : Normalised display string for the Baseline value
+    str_a       : Normalised display string for the Source value
     str_b       : Normalised display string for the Comparison value
     issue_note  : Non-None string describing a parse warning, if any
     """
@@ -215,7 +215,7 @@ def _compare_numeric(val_a, val_b, rule: dict) -> Tuple[bool, str, str, Optional
     if not ok_a and not ok_b:
         issue = f"Could not parse either value as numeric: '{val_a}' / '{val_b}'"
     elif not ok_a:
-        issue = f"Could not parse Baseline value as numeric: '{val_a}'"
+        issue = f"Could not parse Source value as numeric: '{val_a}'"
     elif not ok_b:
         issue = f"Could not parse Comparison value as numeric: '{val_b}'"
 
@@ -271,7 +271,7 @@ def _finish_date_compare(
     if not ok_a and not ok_b:
         issue = f"Could not parse either value as date: '{raw_a}' / '{raw_b}'"
     elif not ok_a:
-        issue = f"Could not parse Baseline value as date: '{raw_a}'"
+        issue = f"Could not parse Source value as date: '{raw_a}'"
     elif not ok_b:
         issue = f"Could not parse Comparison value as date: '{raw_b}'"
 

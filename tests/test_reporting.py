@@ -75,7 +75,7 @@ class TestBuildSummaryDf:
     def test_total_a_correct(self):
         result = _make_result()
         df = build_summary_df(result)
-        row = df[df["Metric"] == "Baseline Dataset: Total Records"]
+        row = df[df["Metric"] == "Source Dataset: Total Records"]
         assert int(row["Count"].iloc[0]) == result.total_a
 
     def test_total_b_correct(self):
@@ -136,22 +136,24 @@ REQUIRED_SHEETS = [
     "Analysis Metadata",
     "Comparison Rules",
     "Delta Counts",
-    "Baseline Only Records",
+    "Source Only Records",
     "Comparison Only Records",
     "Matched Records",
-    "Records with Differences",
-    "Baseline Duplicate Identifiers",
-    "Comparison Duplicates",
+    "Changed Records",
+    "Source Duplicate Keys",
+    "Comparison Duplicate Keys",
     "Data Quality Flags",
 ]
 
 REMOVED_SHEETS = ["Summary", "Only in File A", "Only in File B",
-                  "Changed Records", "Duplicate Keys File A",
-                  "Duplicate Keys File B", "Data Quality Issues"]
+                  "Records with Differences", "Duplicate Keys File A",
+                  "Duplicate Keys File B", "Data Quality Issues",
+                  "Baseline Only Records", "Baseline Duplicate Identifiers",
+                  "Comparison Duplicates"]
 
 
 class TestExcelSheetNames:
-    def _load_wb(self, result=None, a="File A", b="File B"):
+    def _load_wb(self, result=None, a="Source Dataset", b="Comparison Dataset"):
         if result is None:
             result = _make_result()
         raw = export_to_excel(result, a, b)
@@ -214,25 +216,25 @@ class TestExcelSheetNames:
         ws = wb["Delta Counts"]
         assert ws.max_row >= 2
 
-    def test_baseline_only_records_present(self):
+    def test_source_only_records_present(self):
         wb = self._load_wb()
-        assert "Baseline Only Records" in wb.sheetnames
+        assert "Source Only Records" in wb.sheetnames
 
     def test_comparison_only_records_present(self):
         wb = self._load_wb()
         assert "Comparison Only Records" in wb.sheetnames
 
-    def test_records_with_differences_present(self):
+    def test_changed_records_present(self):
         wb = self._load_wb()
-        assert "Records with Differences" in wb.sheetnames
+        assert "Changed Records" in wb.sheetnames
 
-    def test_baseline_duplicates_present(self):
+    def test_source_duplicate_keys_present(self):
         wb = self._load_wb()
-        assert "Baseline Duplicate Identifiers" in wb.sheetnames
+        assert "Source Duplicate Keys" in wb.sheetnames
 
-    def test_comparison_duplicates_present(self):
+    def test_comparison_duplicate_keys_present(self):
         wb = self._load_wb()
-        assert "Comparison Duplicates" in wb.sheetnames
+        assert "Comparison Duplicate Keys" in wb.sheetnames
 
     def test_data_quality_flags_present(self):
         wb = self._load_wb()

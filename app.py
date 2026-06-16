@@ -21,8 +21,9 @@ from src.io_utils import (
     get_column_preview,
     get_display_frame,
     get_excel_sheet_names,
+    get_raw_preview,
     prepare_dataframe_from_raw,
-    read_raw_file,
+    read_uploaded_file_raw,
 )
 from src.reporting import build_change_frequency, build_summary_df, export_to_excel
 
@@ -112,35 +113,42 @@ def _prep_controls(
     """
     Render data preparation controls for one dataset.
     Returns (prepared_df, metadata) or (None, None) on error.
+    Row numbers shown to the user are 1-based; internally 0-based.
     """
     n_rows = len(raw_df)
     st.markdown(f"**{label}**")
 
-    preview_rows = min(RAW_PREVIEW_ROWS, n_rows)
-    st.caption(f"Raw file preview (first {preview_rows} of {n_rows} rows, columns indexed from 0):")
-    raw_preview = raw_df.head(preview_rows).copy()
-    raw_preview.index.name = "Row #"
-    st.dataframe(raw_preview, use_container_width=True, hide_index=False)
+    st.caption(
+        f"Raw file preview (first {min(RAW_PREVIEW_ROWS, n_rows)} of {n_rows} rows). "
+        "The 'Source Row' column shows 1-based row numbers as they appear in the file."
+    )
+    st.dataframe(
+        get_raw_preview(raw_df, max_rows=RAW_PREVIEW_ROWS),
+        use_container_width=True,
+        hide_index=True,
+    )
 
-    header_row = int(st.number_input(
-        "Header row (0-based row number)",
-        min_value=0,
-        max_value=max(0, n_rows - 1),
-        value=0,
+    # 1-based display; convert to 0-based for internal use
+    header_row_display = int(st.number_input(
+        "Header row",
+        min_value=1,
+        max_value=max(1, n_rows),
+        value=1,
         step=1,
         key=f"{key_prefix}_header_row",
         help=(
-            "Row number that contains the column headers (0 = first row). "
-            "Rows before this will be dropped when 'Drop rows above header' is enabled."
+            "Row number (starting from 1) that contains the column headers. "
+            "Row 1 is the first row in the file."
         ),
     ))
+    header_row = header_row_display - 1  # 0-based
 
     if 0 <= header_row < n_rows:
         header_vals = raw_df.iloc[header_row].tolist()
         preview_str = " | ".join(str(v)[:25] for v in header_vals[:12])
         if len(header_vals) > 12:
             preview_str += " ..."
-        st.caption(f"Row {header_row} header preview: {preview_str}")
+        st.caption(f"Row {header_row_display} header preview: {preview_str}")
 
     drop_above = st.checkbox(
         "Drop rows above header",
@@ -149,7 +157,7 @@ def _prep_controls(
         help="Remove all rows that appear before the selected header row.",
     )
     drop_blank = st.checkbox(
-        "Drop blank rows",
+        "Drop fully blank rows",
         value=True,
         key=f"{key_prefix}_drop_blank",
         help="Remove rows where every cell is empty or contains only whitespace.",
@@ -159,19 +167,23 @@ def _prep_controls(
         "Apply end row limit",
         value=False,
         key=f"{key_prefix}_use_end",
-        help="Stop reading data after a specific row (useful for files with trailing metadata or totals).",
+        help=(
+            "Stop reading data after a specific row. "
+            "Use this to exclude footer rows, totals, or trailing notes."
+        ),
     )
     end_row = None
     if use_end_row:
-        end_row = int(st.number_input(
-            "End row (0-based, inclusive)",
-            min_value=header_row + 1,
-            max_value=max(header_row + 1, n_rows - 1),
-            value=max(header_row + 1, n_rows - 1),
+        end_row_display = int(st.number_input(
+            "End row (inclusive)",
+            min_value=header_row_display + 1,
+            max_value=max(header_row_display + 1, n_rows),
+            value=max(header_row_display + 1, n_rows),
             step=1,
             key=f"{key_prefix}_end_row",
-            help="Last row (0-based) to include in the data body.",
+            help="Last row number (1-based) to include in the data body.",
         ))
+        end_row = end_row_display - 1  # 0-based
 
     try:
         prep_df, meta, warns = prepare_dataframe_from_raw(
@@ -184,8 +196,8 @@ def _prep_controls(
         for w in warns:
             st.warning(w)
         st.caption(
-            f"Prepared dataset: {meta['final_row_count']:,} data row(s), "
-            f"{meta['final_column_count']} column(s)."
+            f"Prepared dataset: {meta['rows_in_prepared']:,} data row(s), "
+            f"{meta['columns_in_prepared']} column(s)."
         )
         if not prep_df.empty:
             st.dataframe(
@@ -240,67 +252,83 @@ with col_b:
         label_visibility="collapsed",
     )
 
-raw_a: pd.DataFrame | None = None
-raw_b: pd.DataFrame | None = None
-sheet_a_selected: str | None = None
-sheet_b_selected: str | None = None
-_large_file_blocked = False
+# Detect sheets for any uploaded Excel files
+sheets_a: list[str] = get_excel_sheet_names(file_a) if file_a else []
+sheets_b: list[str] = get_excel_sheet_names(file_b) if file_b else []
 
-if file_a:
-    with col_a:
-        sheets_a = get_excel_sheet_names(file_a)
+sheet_a_selected: str | None = sheets_a[0] if len(sheets_a) == 1 else None
+sheet_b_selected: str | None = sheets_b[0] if len(sheets_b) == 1 else None
+
+# ---------------------------------------------------------------------------
+# Step 2: Select Sheet (only shown for Excel workbooks with multiple tabs)
+# ---------------------------------------------------------------------------
+
+if (file_a is not None or file_b is not None) and (len(sheets_a) > 1 or len(sheets_b) > 1):
+    st.divider()
+    st.markdown(
+        '<div class="section-title">Step 2: Select Sheet</div>',
+        unsafe_allow_html=True,
+    )
+    st.info(
+        "Select the worksheet tab to use from each Excel workbook. "
+        "Only tabs that contain the data applicable to this analysis should be selected."
+    )
+    sh_col_a, sh_col_b = st.columns(2)
+    with sh_col_a:
         if len(sheets_a) > 1:
             sheet_a_selected = st.selectbox(
-                "Sheet: Source Dataset",
+                "Worksheet: Source Dataset",
                 options=sheets_a,
                 key="sheet_a",
             )
-        elif sheets_a:
-            sheet_a_selected = sheets_a[0]
-    try:
-        raw_a = read_raw_file(file_a, sheet_name=sheet_a_selected)
-        with col_a:
-            st.success(f"{len(raw_a):,} rows detected (header assignment in Step 2)")
-            size_status, size_msg = check_file_size(len(raw_a))
-            if size_status == "warn":
-                st.warning(f"Source Dataset: {size_msg}")
-            elif size_status == "hard":
-                st.error(f"Source Dataset: {size_msg}")
-                if not st.checkbox(
-                    "I understand the risk; proceed anyway (Source Dataset)", key="hard_a"
-                ):
-                    _large_file_blocked = True
-    except ValueError as exc:
-        with col_a:
-            st.error(f"Source Dataset error: {exc}")
-
-if file_b:
-    with col_b:
-        sheets_b = get_excel_sheet_names(file_b)
+        elif file_a:
+            st.caption("Source Dataset: single sheet or CSV, no selection required.")
+    with sh_col_b:
         if len(sheets_b) > 1:
             sheet_b_selected = st.selectbox(
-                "Sheet: Comparison Dataset",
+                "Worksheet: Comparison Dataset",
                 options=sheets_b,
                 key="sheet_b",
             )
-        elif sheets_b:
-            sheet_b_selected = sheets_b[0]
+        elif file_b:
+            st.caption("Comparison Dataset: single sheet or CSV, no selection required.")
+
+# Read raw files (no UI step; happens automatically after sheet selection)
+raw_a: pd.DataFrame | None = None
+raw_b: pd.DataFrame | None = None
+_large_file_blocked = False
+
+if file_a:
     try:
-        raw_b = read_raw_file(file_b, sheet_name=sheet_b_selected)
-        with col_b:
-            st.success(f"{len(raw_b):,} rows detected (header assignment in Step 2)")
-            size_status, size_msg = check_file_size(len(raw_b))
-            if size_status == "warn":
-                st.warning(f"Comparison Dataset: {size_msg}")
-            elif size_status == "hard":
-                st.error(f"Comparison Dataset: {size_msg}")
-                if not st.checkbox(
-                    "I understand the risk; proceed anyway (Comparison Dataset)", key="hard_b"
-                ):
-                    _large_file_blocked = True
+        raw_a = read_uploaded_file_raw(file_a, sheet_name=sheet_a_selected)
+        col_a.success(f"{len(raw_a):,} rows detected (header assignment in Step 3)")
+        size_status, size_msg = check_file_size(len(raw_a))
+        if size_status == "warn":
+            col_a.warning(f"Source Dataset: {size_msg}")
+        elif size_status == "hard":
+            col_a.error(f"Source Dataset: {size_msg}")
+            if not col_a.checkbox(
+                "I understand the risk; proceed anyway (Source Dataset)", key="hard_a"
+            ):
+                _large_file_blocked = True
     except ValueError as exc:
-        with col_b:
-            st.error(f"Comparison Dataset error: {exc}")
+        col_a.error(f"Source Dataset error: {exc}")
+
+if file_b:
+    try:
+        raw_b = read_uploaded_file_raw(file_b, sheet_name=sheet_b_selected)
+        col_b.success(f"{len(raw_b):,} rows detected (header assignment in Step 3)")
+        size_status, size_msg = check_file_size(len(raw_b))
+        if size_status == "warn":
+            col_b.warning(f"Comparison Dataset: {size_msg}")
+        elif size_status == "hard":
+            col_b.error(f"Comparison Dataset: {size_msg}")
+            if not col_b.checkbox(
+                "I understand the risk; proceed anyway (Comparison Dataset)", key="hard_b"
+            ):
+                _large_file_blocked = True
+    except ValueError as exc:
+        col_b.error(f"Comparison Dataset error: {exc}")
 
 # ---------------------------------------------------------------------------
 # Step 2: Prepare Data
@@ -308,28 +336,29 @@ if file_b:
 
 df_a: pd.DataFrame | None = None
 df_b: pd.DataFrame | None = None
-prep_meta_a: dict | None = None
-prep_meta_b: dict | None = None
+source_prep_metadata: dict | None = None
+comparison_prep_metadata: dict | None = None
 
 if raw_a is not None and raw_b is not None:
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 2: Prepare Data</div>',
+        '<div class="section-title">Step 3: Prepare Headers and Rows</div>',
         unsafe_allow_html=True,
     )
     st.info(
-        "Review the raw file contents and assign the correct header row for each dataset. "
+        "Review the raw file contents below and assign the correct header row for each dataset. "
         "Rows above the header (report titles, agency metadata, blank separators) can be "
-        "excluded automatically. Trailing blank rows are removed by default."
+        "excluded automatically. Fully blank rows are removed by default. "
+        "Use the end row setting to exclude footer rows, totals, or trailing notes."
     )
 
     prep_col_a, prep_col_b = st.columns(2)
 
     with prep_col_a:
-        df_a, prep_meta_a = _prep_controls(raw_a, "Source Dataset", "prep_a")
+        df_a, source_prep_metadata = _prep_controls(raw_a, "Source Dataset", "prep_a")
 
     with prep_col_b:
-        df_b, prep_meta_b = _prep_controls(raw_b, "Comparison Dataset", "prep_b")
+        df_b, comparison_prep_metadata = _prep_controls(raw_b, "Comparison Dataset", "prep_b")
 
 # ---------------------------------------------------------------------------
 # Step 3: Key column configuration
@@ -338,7 +367,7 @@ if raw_a is not None and raw_b is not None:
 if df_a is not None and df_b is not None:
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 3: Configure Match Keys</div>',
+        '<div class="section-title">Step 4: Configure Match Keys</div>',
         unsafe_allow_html=True,
     )
     st.info(
@@ -381,7 +410,7 @@ if df_a is not None and df_b is not None:
 
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 4: Select Fields to Compare</div>',
+        '<div class="section-title">Step 5: Select Fields to Compare</div>',
         unsafe_allow_html=True,
     )
     st.info(
@@ -514,7 +543,7 @@ if df_a is not None and df_b is not None:
 
     st.divider()
     st.markdown(
-        '<div class="section-title">Step 5: Run Analysis</div>',
+        '<div class="section-title">Step 6: Run Analysis</div>',
         unsafe_allow_html=True,
     )
 
@@ -544,11 +573,11 @@ if df_a is not None and df_b is not None:
                     sheet_a=sheet_a_selected,
                     sheet_b=sheet_b_selected,
                 )
-                st.session_state["result"]      = result
-                st.session_state["file_a_name"] = file_a.name
-                st.session_state["file_b_name"] = file_b.name
-                st.session_state["prep_meta_a"] = prep_meta_a
-                st.session_state["prep_meta_b"] = prep_meta_b
+                st.session_state["result"]                   = result
+                st.session_state["file_a_name"]              = file_a.name
+                st.session_state["file_b_name"]              = file_b.name
+                st.session_state["source_prep_metadata"]     = source_prep_metadata
+                st.session_state["comparison_prep_metadata"] = comparison_prep_metadata
                 st.success("Analysis complete. Review the results below.")
             except ValueError as exc:
                 st.error(f"Analysis error: {exc}")
@@ -908,8 +937,8 @@ if "result" in st.session_state:
                 result,
                 file_a_name,
                 file_b_name,
-                prep_meta_a=st.session_state.get("prep_meta_a"),
-                prep_meta_b=st.session_state.get("prep_meta_b"),
+                source_prep_metadata=st.session_state.get("source_prep_metadata"),
+                comparison_prep_metadata=st.session_state.get("comparison_prep_metadata"),
             )
 
         st.download_button(
@@ -925,7 +954,7 @@ if "result" in st.session_state:
             """
             The Excel workbook contains **11 tabs**:
             - **Executive Summary:** auto-generated plain-English briefing narrative
-            - **Analysis Metadata:** dataset names, sheets, record counts, key columns, timestamp, and data preparation settings
+            - **Analysis Metadata:** dataset names, sheets, record counts, key columns, timestamp, and header/row preparation settings
             - **Comparison Rules:** per-field comparison type, tolerance, and date precision settings
             - **Delta Counts:** flat count table suitable for pivot tables and downstream reporting
             - **Source Only Records:** records present in the source but absent from comparison

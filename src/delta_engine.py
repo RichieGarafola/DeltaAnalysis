@@ -27,14 +27,14 @@ class DeltaResult:
     only_in_b: pd.DataFrame
     matched: pd.DataFrame          # All common-key records, side-by-side
     changed: pd.DataFrame          # Matched records where compared fields differ
-    duplicates_a: pd.DataFrame     # Rows sharing a key within the Baseline Dataset
+    duplicates_a: pd.DataFrame     # Rows sharing a key within the Source Dataset
     duplicates_b: pd.DataFrame     # Rows sharing a key within the Comparison Dataset
-    blank_keys_a: pd.DataFrame     # Rows with blank/null keys in the Baseline Dataset
+    blank_keys_a: pd.DataFrame     # Rows with blank/null keys in the Source Dataset
     blank_keys_b: pd.DataFrame     # Rows with blank/null keys in the Comparison Dataset
 
     key_cols_a: List[str]
     key_cols_b: List[str]
-    compare_cols_a: List[str]      # Comparison field names from the Baseline Dataset
+    compare_cols_a: List[str]      # Comparison field names from the Source Dataset
     compare_cols_b: List[str]      # Corresponding field names from the Comparison Dataset
 
     total_a: int                   # Original row count before any filtering
@@ -88,22 +88,22 @@ def run_delta(
     compare_cols_b = compare_cols_b or []
 
     # --- Validate inputs ---------------------------------------------------
-    _validate_columns(df_a, key_cols_a, "Baseline Dataset")
+    _validate_columns(df_a, key_cols_a, "Source Dataset")
     _validate_columns(df_b, key_cols_b, "Comparison Dataset")
 
     if len(key_cols_a) != len(key_cols_b):
         raise ValueError(
             f"Key column counts must match: "
-            f"Baseline has {len(key_cols_a)}, Comparison has {len(key_cols_b)}."
+            f"Source has {len(key_cols_a)}, Comparison has {len(key_cols_b)}."
         )
 
     if compare_cols_a or compare_cols_b:
-        _validate_columns(df_a, compare_cols_a, "Baseline Dataset comparison fields")
+        _validate_columns(df_a, compare_cols_a, "Source Dataset comparison fields")
         _validate_columns(df_b, compare_cols_b, "Comparison Dataset comparison fields")
         if len(compare_cols_a) != len(compare_cols_b):
             raise ValueError(
                 f"Comparison column counts must match: "
-                f"Baseline has {len(compare_cols_a)}, Comparison has {len(compare_cols_b)}."
+                f"Source has {len(compare_cols_a)}, Comparison has {len(compare_cols_b)}."
             )
 
     total_a = len(df_a)
@@ -170,7 +170,7 @@ def run_delta(
     matched_a = a_dedup[a_dedup["__key__"].isin(common_keys)].set_index("__key__")
     matched_b = b_dedup[b_dedup["__key__"].isin(common_keys)].set_index("__key__")
 
-    a_prefixed = matched_a.rename(columns=lambda c: f"Baseline: {c}")
+    a_prefixed = matched_a.rename(columns=lambda c: f"Source: {c}")
     b_prefixed = matched_b.rename(columns=lambda c: f"Comparison: {c}")
     matched_combined = (
         a_prefixed.join(b_prefixed, how="inner")
@@ -291,7 +291,7 @@ def _find_changed(
             for kc in key_cols_a:
                 record[f"Key: {kc}"] = row_a.get(kc, "")
             for col, (before, after) in diffs.items():
-                record[f"{col} - Baseline"] = before
+                record[f"{col} - Source"] = before
                 record[f"{col} - Comparison"] = after
             rows.append(record)
 

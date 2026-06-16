@@ -118,15 +118,16 @@ def export_to_excel(
     result: DeltaResult,
     file_a_name: str = "Source Dataset",
     file_b_name: str = "Comparison Dataset",
-    prep_meta_a: Optional[dict] = None,
-    prep_meta_b: Optional[dict] = None,
+    source_prep_metadata: Optional[dict] = None,
+    comparison_prep_metadata: Optional[dict] = None,
 ) -> bytes:
     """
     Build a polished, multi-tab Excel workbook from a DeltaResult.
     Returns raw bytes for Streamlit download.
 
-    prep_meta_a / prep_meta_b : optional dicts from prepare_dataframe_from_raw;
-    when provided, their contents are appended to the Analysis Metadata tab.
+    source_prep_metadata / comparison_prep_metadata : optional dicts from
+    prepare_dataframe_from_raw; when provided, their contents are appended
+    to the Analysis Metadata tab.
     """
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -141,7 +142,10 @@ def export_to_excel(
         dq_rows.append({"Dataset": "Comparison", "Filename": file_b_name, "Flag": "Missing Identifier", **row.to_dict()})
     dq_df = pd.DataFrame(dq_rows) if dq_rows else pd.DataFrame(columns=["Dataset", "Filename", "Flag"])
 
-    metadata_df = _build_metadata_df(result, file_a_name, file_b_name, run_timestamp, prep_meta_a, prep_meta_b)
+    metadata_df = _build_metadata_df(
+        result, file_a_name, file_b_name, run_timestamp,
+        source_prep_metadata, comparison_prep_metadata,
+    )
     rules_df    = _build_rules_df(result)
 
     buffer = io.BytesIO()
@@ -321,43 +325,46 @@ def _build_metadata_df(
     file_a_name: str,
     file_b_name: str,
     run_timestamp: str,
-    prep_meta_a: Optional[dict] = None,
-    prep_meta_b: Optional[dict] = None,
+    source_prep_metadata: Optional[dict] = None,
+    comparison_prep_metadata: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Tabular run metadata for the Analysis Metadata tab."""
     rows = [
-        ("Analysis Timestamp",                   run_timestamp),
-        ("Source Dataset",                       file_a_name),
-        ("Source Sheet / Tab",                   result.sheet_a or "Default (first sheet or CSV)"),
-        ("Source Record Count",                  str(result.total_a)),
-        ("Comparison Dataset",                   file_b_name),
-        ("Comparison Sheet / Tab",               result.sheet_b or "Default (first sheet or CSV)"),
-        ("Comparison Record Count",              str(result.total_b)),
-        ("Match Key Fields (Source)",            ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
-        ("Match Key Fields (Comparison)",        ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
-        ("Comparison Fields (Source)",           ", ".join(result.compare_cols_a) if result.compare_cols_a else "None configured"),
-        ("Comparison Fields (Comparison)",       ", ".join(result.compare_cols_b) if result.compare_cols_b else "None configured"),
-        ("Comparison Rules Applied",             str(len(result.comparison_rules))),
-        ("Parse Warnings",                       str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
+        ("Analysis Timestamp",              run_timestamp),
+        ("Source Dataset",                  file_a_name),
+        ("Source Sheet / Tab",              result.sheet_a or "Default (first sheet or CSV)"),
+        ("Source Record Count",             str(result.total_a)),
+        ("Comparison Dataset",              file_b_name),
+        ("Comparison Sheet / Tab",          result.sheet_b or "Default (first sheet or CSV)"),
+        ("Comparison Record Count",         str(result.total_b)),
+        ("Match Key Fields (Source)",       ", ".join(result.key_cols_a) if result.key_cols_a else "None"),
+        ("Match Key Fields (Comparison)",   ", ".join(result.key_cols_b) if result.key_cols_b else "None"),
+        ("Comparison Fields (Source)",      ", ".join(result.compare_cols_a) if result.compare_cols_a else "None configured"),
+        ("Comparison Fields (Comparison)",  ", ".join(result.compare_cols_b) if result.compare_cols_b else "None configured"),
+        ("Comparison Rules Applied",        str(len(result.comparison_rules))),
+        ("Parse Warnings",                  str(len(result.compare_parse_issues)) if result.compare_parse_issues is not None else "0"),
     ]
 
-    if prep_meta_a:
-        rows.extend([
-            ("Source Header Row Selected",        str(prep_meta_a.get("header_row_selected", ""))),
-            ("Source Rows Dropped Above Header",  str(prep_meta_a.get("rows_dropped_above_header", ""))),
-            ("Source Blank Rows Dropped",         str(prep_meta_a.get("rows_dropped_blank", ""))),
-        ])
-        if prep_meta_a.get("end_row_applied") is not None:
-            rows.append(("Source End Row Applied", str(prep_meta_a["end_row_applied"])))
+    def _prep_rows(meta: dict, prefix: str) -> list:
+        h = meta.get("header_row_selected", 0)
+        end = meta.get("end_row_selected")
+        return [
+            (f"{prefix} Header Row Selected",          str(h + 1)),
+            (f"{prefix} Rows Dropped Above Header",    str(meta.get("rows_dropped_above_header", 0))),
+            (f"{prefix} Blank Rows Dropped",           str(meta.get("rows_dropped_blank", 0))),
+            (f"{prefix} End Row Selected",             str(end + 1) if end is not None else "Not applied"),
+            (f"{prefix} Rows Dropped After End Row",   str(meta.get("rows_dropped_after_end_row", 0))),
+            (f"{prefix} Prepared Row Count",           str(meta.get("rows_in_prepared", meta.get("final_row_count", "")))),
+            (f"{prefix} Prepared Column Count",        str(meta.get("columns_in_prepared", meta.get("final_column_count", "")))),
+            (f"{prefix} Blank Headers Renamed",        str(meta.get("blank_headers_renamed", 0))),
+            (f"{prefix} Duplicate Headers Renamed",    str(meta.get("duplicate_headers_renamed", 0))),
+        ]
 
-    if prep_meta_b:
-        rows.extend([
-            ("Comparison Header Row Selected",        str(prep_meta_b.get("header_row_selected", ""))),
-            ("Comparison Rows Dropped Above Header",  str(prep_meta_b.get("rows_dropped_above_header", ""))),
-            ("Comparison Blank Rows Dropped",         str(prep_meta_b.get("rows_dropped_blank", ""))),
-        ])
-        if prep_meta_b.get("end_row_applied") is not None:
-            rows.append(("Comparison End Row Applied", str(prep_meta_b["end_row_applied"])))
+    if source_prep_metadata:
+        rows.extend(_prep_rows(source_prep_metadata, "Source"))
+
+    if comparison_prep_metadata:
+        rows.extend(_prep_rows(comparison_prep_metadata, "Comparison"))
 
     return pd.DataFrame(rows, columns=["Parameter", "Value"])
 

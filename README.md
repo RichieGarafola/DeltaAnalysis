@@ -26,14 +26,15 @@ Typical scenarios:
 
 | Feature | Detail |
 |---|---|
-| Bidirectional comparison | Six result categories: Baseline Only, Comparison Only, Matched, Records with Differences, Duplicate Identifiers, Data Quality Flags |
+| Bidirectional comparison | Six result categories: Source Only, Comparison Only, Matched, Records with Differences, Duplicate Identifiers, Data Quality Flags |
+| Data preparation workflow | User-controlled header row selection, row trimming above/below, and blank row removal before reconciliation |
 | Multi-sheet Excel support | Sheet selector appears automatically when an uploaded file contains multiple worksheets |
 | Numeric tolerance | Strips currency symbols ($, £, €), commas, and parenthesised negatives; configurable tolerance per field |
 | Date-aware comparison | Parses ISO and US date formats; `date_only` mode ignores time; `datetime_precision` mode preserves time |
 | Large-file safeguards | Warning banner at 100,000 rows; confirmation gate at 500,000 rows; table previews capped at 1,000 rows |
 | Executive Summary | Auto-generated plain-English briefing narrative (every number is derived from the actual results) |
 | 11-tab Excel workbook | Audit-ready export with metadata, comparison rules, delta counts, and per-category data tabs |
-| 177-test suite | Covers normalization, comparison logic, I/O utilities, reporting, and end-to-end scenarios |
+| 253-test suite | Covers normalization, comparison logic, I/O utilities, data preparation, reporting, and end-to-end scenarios |
 
 ---
 
@@ -78,11 +79,11 @@ Opens at `http://localhost:8501`. No configuration file required.
 
 **Workflow:**
 
-1. Upload the **Baseline Dataset** (prior period, source of record, or authoritative extract)
-2. Upload the **Comparison Dataset** (current period, received file, or updated extract)
-3. Select the **match key column(s)** from each dataset (these uniquely identify each record, e.g., Contract Number, Case ID)
-4. Select **comparison fields** to diff across matched records (e.g., obligation amount, status, date)
-5. Optionally expand **Advanced Comparison Settings** to assign numeric tolerance or date precision per field
+1. Upload the **Source Dataset** and **Comparison Dataset** (CSV or Excel)
+2. Select the worksheet (if the file contains multiple sheets)
+3. Prepare headers and rows (select the header row, trim title/footer rows, drop blank rows)
+4. Select the **match key column(s)** from each dataset (these uniquely identify each record, e.g., Contract Number, Case ID)
+5. Select **comparison fields** to diff across matched records (e.g., obligation amount, status, date)
 6. Click **Run Delta Analysis**
 7. Review results in the interactive dashboard; download per-category CSVs or the full Excel report
 
@@ -101,6 +102,48 @@ Parses both ISO (`YYYY-MM-DD`) and US (`MM/DD/YYYY`) formats, then compares cale
 
 ### Date: `datetime_precision`
 Same format parsing as `date_only`, but time is included in the comparison. `2024-01-15 08:30` and `2024-01-15 14:00` are treated as different.
+
+---
+
+## Data Preparation Workflow
+
+Many government extracts include title rows, agency metadata, or footer totals above or below the actual data. The Data Preparation step (Step 3 in the 6-step workflow) lets you identify the correct header row and discard non-data rows before reconciliation begins.
+
+### Example
+
+A file downloaded from a case management system might look like this:
+
+| Row | Content |
+|---|---|
+| 1 | Monthly Reconciliation Report |
+| 2 | Exported: 2025-06-01 |
+| 3 | (blank) |
+| 4 | CaseID, Status, Amount |
+| 5 | 1001, Open, 500 |
+| 6 | 1002, Closed, 750 |
+| 7 | Total, , 1250 |
+
+The correct preparation settings for this file:
+
+- **Header Row:** 4 (the row containing column names, displayed 1-based in the UI)
+- **Drop rows above header:** Yes (removes rows 1-3 before processing)
+- **Drop fully blank rows:** Yes (removes the blank row if any exist after the header)
+- **End Row:** 6 (stops before the "Total" footer row; displayed 1-based)
+
+After preparation, the dataset contains two records with columns CaseID, Status, and Amount. The preparation summary is written to the Analysis Metadata tab of the exported Excel workbook so the selection is auditable.
+
+### Preparation Controls
+
+| Control | Default | Description |
+|---|---|---|
+| Header Row | 1 | The 1-based row number containing column names |
+| Drop rows above header | Yes | Removes all rows above the selected header row |
+| Drop fully blank rows | Yes | Removes rows where every cell is empty |
+| End Row | (none) | The last data row to include; rows after this row are excluded |
+
+### Blank and Duplicate Header Handling
+
+If a column header is blank, it is renamed `Unnamed_1`, `Unnamed_2`, etc. If the same header appears more than once, duplicates are renamed `ColumnName_2`, `ColumnName_3`, etc. Both are reported as warnings and counted in the preparation summary.
 
 ---
 
@@ -177,7 +220,7 @@ Recommended settings:
 pytest tests/ -v
 ```
 
-Expected: **177 tests passing** across five test modules.
+Expected: **253 tests passing** across seven test modules.
 
 With coverage:
 
@@ -191,32 +234,34 @@ pytest tests/ --cov=src --cov-report=term-missing
 
 ```
 DeltaAnalysis/
-├── app.py                      # Streamlit UI - main entry point
+├── app.py                          # Streamlit UI - main entry point
 ├── requirements.txt
 ├── README.md
 ├── .gitignore
 ├── .github/
 │   └── workflows/
-│       └── tests.yml           # CI: runs pytest on push and pull_request
+│       └── tests.yml               # CI: runs pytest on push and pull_request
 ├── src/
 │   ├── __init__.py
-│   ├── normalization.py        # Key cleaning: trim, fix "1234.0" artifacts, handle nulls
-│   ├── io_utils.py             # File upload parsing, sheet names, large-file safeguards
-│   ├── comparison.py           # Type-aware field comparison (numeric, date, text)
-│   ├── delta_engine.py         # Core comparison engine → DeltaResult dataclass
-│   └── reporting.py            # 11-tab Excel export with Executive Summary narrative
+│   ├── normalization.py            # Key cleaning: trim, fix "1234.0" artifacts, handle nulls
+│   ├── io_utils.py                 # File I/O, raw read, data preparation, sheet names
+│   ├── comparison.py               # Type-aware field comparison (numeric, date, text)
+│   ├── delta_engine.py             # Core comparison engine → DeltaResult dataclass
+│   └── reporting.py                # 11-tab Excel export with Executive Summary narrative
 ├── tests/
 │   ├── __init__.py
-│   ├── test_normalization.py   # 21 unit tests - key normalization
-│   ├── test_delta_engine.py    # 26 unit tests - comparison categories and validation
-│   ├── test_comparison.py      # 47 unit tests - numeric, date, and field-level comparison
-│   ├── test_io_utils.py        # 24 unit tests - file parsing, sheet selection, size checks
-│   └── test_e2e_validation.py  # 59 integration tests - full workbook and scenario coverage
+│   ├── test_normalization.py       # 21 unit tests - key normalization
+│   ├── test_delta_engine.py        # 26 unit tests - comparison categories and validation
+│   ├── test_comparison.py          # 47 unit tests - numeric, date, and field-level comparison
+│   ├── test_io_utils.py            # 24 unit tests - file parsing, sheet selection, size checks
+│   ├── test_prepare_dataframe.py   # 35 unit tests - raw read, prepare_dataframe, report metadata
+│   ├── test_data_preparation.py    # 41 unit tests - v1.2 data preparation workflow
+│   └── test_e2e_validation.py      # 59 integration tests - full workbook and scenario coverage
 └── sample_data/
-    ├── file_a.csv              # Minimal demo - one of each delta category
-    ├── file_b.csv              # Minimal demo - comparison side
-    ├── sample_a.csv            # Full contracting dataset (11-row baseline)
-    └── sample_b.csv            # Full contracting dataset (10-row comparison)
+    ├── file_a.csv                  # Minimal demo - one of each delta category
+    ├── file_b.csv                  # Minimal demo - comparison side
+    ├── sample_a.csv                # Full contracting dataset (11-row source)
+    └── sample_b.csv                # Full contracting dataset (10-row comparison)
 ```
 
 ---
@@ -247,7 +292,7 @@ DeltaAnalysis/
 
 ## CI/CD
 
-A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test suite on every push and pull request. The build fails if any test fails. All five test modules are included in the CI run.
+A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test suite on every push and pull request. The build fails if any test fails. All seven test modules are included in the CI run.
 
 ---
 
