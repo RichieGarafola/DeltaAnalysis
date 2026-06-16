@@ -310,7 +310,7 @@ class TestEndRowBeforeHeader:
 
 
 # ---------------------------------------------------------------------------
-# Test 10: Raw CSV read — no header assumed
+# Test 10: Raw CSV read - no header assumed
 # ---------------------------------------------------------------------------
 
 class TestRawCsvRead:

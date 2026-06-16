@@ -275,7 +275,7 @@ def prepare_dataframe_from_raw(
     (prepared_df, metadata, warnings)
 
     prepared_df : DataFrame with proper column names and cleaned rows
-    metadata    : Dict — see keys below
+    metadata    : Dict - see keys below
     warnings    : List of professional warning strings
 
     Metadata keys

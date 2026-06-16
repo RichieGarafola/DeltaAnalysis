@@ -69,7 +69,7 @@ def _minimal_prep_meta(**overrides) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# TestReadRawFile — alias and primary name both work
+# TestReadRawFile - alias and primary name both work
 # ---------------------------------------------------------------------------
 
 class TestReadRawFile:
