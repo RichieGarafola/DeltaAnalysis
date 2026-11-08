@@ -1,0 +1,5 @@
+InvoiceID,Vendor,Status,Amount,Reviewer
+INV-001,Example Supplies Co.,Approved,1250.00,Reviewer A
+INV-002,Sample Freight Ltd.,Paid,3395.25,Reviewer B
+INV-005,Mock Utilities LLC,Pending,842.10,Reviewer C
+INV-004,Placeholder Parts Inc.,Approved,9020.00,Reviewer C

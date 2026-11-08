@@ -1,0 +1,11 @@
+InvoiceID,Vendor,InvoiceAmount,Status,InvoiceDate,Reviewer,CostCenter
+INV-24001,Example Supplies Co.,1840.00,Paid,2025-03-03,Reviewer A,CC-100
+INV-24002,Sample Freight Ltd.,9625.50,Paid,2025-03-05,Reviewer B,CC-200
+INV-24003,Demo Office Services,412.75,Open,2025-03-08,Reviewer A,CC-100
+INV-24004,Placeholder Parts Inc.,25800.00,Approved,2025-03-10,Reviewer C,CC-300
+INV-24005,Test Data Logistics,5150.00,Paid,2025-03-12,Reviewer D,CC-200
+INV-24006,Mock Utilities LLC,1288.40,Paid,2025-03-15,Reviewer C,CC-400
+INV-24009,Synthetic Software Ltd.,14999.00,Approved,2025-03-24,Reviewer C,CC-300
+INV-24010,Example Supplies Co.,530.60,Open,2025-04-02,Reviewer A,CC-100
+INV-24011,Sample Freight Ltd.,4410.00,Open,2025-04-07,Reviewer B,CC-200
+INV-24012,Demo Office Services,388.20,Pending,2025-04-11,Reviewer D,CC-100

@@ -1,0 +1,7 @@
+InvoiceID,Vendor,Status,Amount,Reviewer
+INV-001,Example Supplies Co.,Approved,1250.00,Reviewer A
+INV-002,Sample Freight Ltd.,Pending,3480.25,Reviewer B
+INV-003,Demo Office Services,Open,615.00,Reviewer A
+INV-004,Placeholder Parts Inc.,Approved,9020.00,Reviewer C
+INV-004,Placeholder Parts Inc.,Approved,9020.00,Reviewer C
+,Unassigned Vendor,Open,75.00,Reviewer B
