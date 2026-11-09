@@ -3,6 +3,7 @@ Tests for src/reporting.py: build_summary_df, build_change_frequency,
 export_to_excel (sheet names, metadata content, rules content).
 """
 import io
+import re
 
 import pandas as pd
 import pytest
@@ -431,3 +432,36 @@ class TestChangeFrequencyBundledSamples:
         expected = {"Status": 1, "Amount": 1}
         assert _engine_field_counts(df_a, df_b, "InvoiceID", cols) == expected
         assert _freq_dict(result) == expected
+
+
+# ---------------------------------------------------------------------------
+# Executive Summary cross-references
+# ---------------------------------------------------------------------------
+
+def _summary_text(result):
+    wb = load_workbook(io.BytesIO(export_to_excel(result, "Source Dataset", "Comparison Dataset")))
+    ws = wb["Executive Summary"]
+    text = " ".join(
+        str(cell.value) for row in ws.iter_rows() for cell in row if cell.value is not None
+    )
+    return wb, text
+
+
+class TestExecutiveSummaryReferences:
+    def test_changed_records_reference_names_the_real_worksheet(self):
+        result = _make_result()
+        assert len(result.changed) > 0
+        wb, text = _summary_text(result)
+        assert "'Changed Records' worksheet" in text
+        assert "Changed Records" in wb.sheetnames
+
+    def test_no_legacy_worksheet_name_in_summary(self):
+        _, text = _summary_text(_make_result())
+        assert "Records with Differences" not in text
+
+    def test_every_referenced_worksheet_exists(self):
+        wb, text = _summary_text(_make_result())
+        referenced = re.findall(r"'([^']+)' worksheet", text)
+        assert referenced, "expected at least one worksheet reference"
+        missing = [name for name in referenced if name not in wb.sheetnames]
+        assert not missing, f"Executive Summary references missing worksheets: {missing}"

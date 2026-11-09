@@ -239,7 +239,7 @@ def _build_narrative(
                 f"Of the {n_matched:,} matched records, {n_changed:,} ({pct(n_changed, n_matched)}) "
                 f"contained at least one field-level difference in the following compared fields: "
                 f"{compare_label}. Before and after values for each difference are detailed in the "
-                f"'Records with Differences' worksheet."
+                f"'Changed Records' worksheet."
             )
     else:
         changes = (
