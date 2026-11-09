@@ -92,7 +92,14 @@ def build_summary_df(result: DeltaResult) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
-    """Count how many times each compared field changed."""
+    """Count how many changed records differ in each compared field.
+
+    ``result.changed`` holds before/after values only for the fields the
+    comparison engine judged different in that record (always non-null
+    strings); fields that matched are absent and appear as NaN placeholders.
+    A field is therefore counted for a record when the engine populated its
+    cells. Re-comparing the cells here would count NaN != NaN as a change.
+    """
     if result.changed.empty or not result.compare_cols_a:
         return pd.DataFrame(columns=["Field", "Changes"])
 
@@ -101,7 +108,7 @@ def build_change_frequency(result: DeltaResult) -> pd.DataFrame:
         a_col = f"{col} - Source"
         b_col = f"{col} - Comparison"
         if a_col in result.changed.columns and b_col in result.changed.columns:
-            n_changed = (result.changed[a_col] != result.changed[b_col]).sum()
+            n_changed = (result.changed[a_col].notna() | result.changed[b_col].notna()).sum()
             rows.append({"Field": col, "Changes": int(n_changed)})
 
     if not rows:
