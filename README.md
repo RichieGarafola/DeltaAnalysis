@@ -4,7 +4,38 @@
 
 [![Tests](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml/badge.svg)](https://github.com/RichieGarafola/DeltaAnalysis/actions/workflows/tests.yml)
 
-A Python + Streamlit application built for analysts who need to compare two versions of a dataset: financial reconciliation, invoice and payment matching, change tracking between reporting periods, and duplicate identifier checks. Upload a Baseline Dataset and a Comparison Dataset, define your match keys, and produce a complete delta analysis in seconds.
+**[Live demo → deltaanalysis.streamlit.app](https://deltaanalysis.streamlit.app)**
+
+> **Public demo: upload only synthetic or non-sensitive data.** The hosted demo is open to anyone and has no login. Files you upload are processed on third-party hosting (Streamlit Community Cloud). Use the bundled files in [`sample_data/`](sample_data/) or other non-confidential data. For confidential data, run the app locally (see [Installation](#installation)).
+
+A Python + Streamlit application built for analysts who need to compare two versions of a dataset: financial reconciliation, invoice and payment matching, change tracking between reporting periods, and duplicate identifier checks. Upload a Source Dataset and a Comparison Dataset, define your match keys, and produce a complete delta analysis in seconds.
+
+---
+
+## Try It in Two Minutes (Synthetic Sample Data)
+
+1. Download the two synthetic invoice-register files: [`sample_a.csv`](https://raw.githubusercontent.com/RichieGarafola/DeltaAnalysis/main/sample_data/sample_a.csv) and [`sample_b.csv`](https://raw.githubusercontent.com/RichieGarafola/DeltaAnalysis/main/sample_data/sample_b.csv). All vendors, reviewers, and amounts are invented.
+2. Open the [live demo](https://deltaanalysis.streamlit.app) (or run it locally). Upload `sample_a.csv` as the **Source Dataset** and `sample_b.csv` as the **Comparison Dataset**.
+3. **Step 3 (Prepare Headers and Rows):** keep the defaults (header row 1).
+4. **Step 4 (Match Keys):** select `InvoiceID` for both datasets.
+5. **Step 5 (Fields to Compare):** keep only `InvoiceAmount`, `Status`, and `Reviewer` on both sides.
+6. Click **Run Delta Analysis**. The dashboard should show:
+
+| Source Records | Comparison Records | Source Only | Comparison Only | Matched | Changed | Source Duplicate Keys | Source Missing Keys |
+|---|---|---|---|---|---|---|---|
+| 11 | 10 | 2 | 3 | 7 | 4 | 2 | 1 |
+
+7. Open the **Changed Records** tab to see before/after values. Then click **Download Excel Report** for the 11-tab workbook.
+
+### Screenshots
+
+All screenshots were captured from the live demo using the bundled synthetic files above.
+
+| Upload and prepare | Match keys and comparison fields |
+|---|---|
+| ![Upload sample_a.csv and sample_b.csv, then review header preparation](docs/screenshots/01_upload_and_prepare.png) | ![InvoiceID selected as the match key; InvoiceAmount, Status, Reviewer selected for comparison](docs/screenshots/02_match_keys_and_fields.png) |
+| **Results dashboard** | **Changed records** |
+| ![KPI cards, reconciliation summary chart, and match coverage donut](docs/screenshots/03_results_dashboard.png) | ![Changed Records tab showing Source vs Comparison values for four invoices](docs/screenshots/04_changed_records.png) |
 
 ---
 
@@ -26,11 +57,11 @@ Typical scenarios:
 
 | Feature | Detail |
 |---|---|
-| Bidirectional comparison | Six result categories: Source Only, Comparison Only, Matched, Records with Differences, Duplicate Identifiers, Data Quality Flags |
+| Bidirectional comparison | Six result categories: Source Only, Comparison Only, Matched, Changed Records, Duplicate Keys, Data Quality Flags |
 | Data preparation workflow | User-controlled header row selection, row trimming above/below, and blank row removal before reconciliation |
 | Multi-sheet Excel support | Sheet selector appears automatically when an uploaded file contains multiple worksheets |
-| Numeric tolerance | Strips currency symbols ($, £, €), commas, and parenthesised negatives; configurable tolerance per field |
-| Date-aware comparison | Parses ISO and US date formats; `date_only` mode ignores time; `datetime_precision` mode preserves time |
+| Numeric tolerance | Strips currency symbols ($, £, €), commas, and parenthesised negatives; one absolute tolerance value applies to all fields selected as numeric |
+| Date-aware comparison | Parses ISO and US date formats; `date_only` mode ignores time; `datetime_precision` mode preserves time (one mode applies to all fields selected as dates; there is no date tolerance window) |
 | Large-file safeguards | Warning banner at 100,000 rows; confirmation gate at 500,000 rows; table previews capped at 1,000 rows |
 | Executive Summary | Auto-generated plain-English briefing narrative (every number is derived from the actual results) |
 | 11-tab Excel workbook | Audit-ready export with metadata, comparison rules, delta counts, and per-category data tabs |
@@ -95,7 +126,7 @@ Opens at `http://localhost:8501`. No configuration file required.
 All fields default to exact text comparison after whitespace normalization. Leading/trailing spaces and case are preserved as-is.
 
 ### Numeric
-Strips currency symbols (`$`, `£`, `€`, `¥`), commas, and parenthesised negatives `(1,500.00)` before comparing. A configurable tolerance allows small rounding differences to be treated as equal.
+Strips currency symbols (`$`, `£`, `€`, `¥`), commas, and parenthesised negatives `(1,500.00)` before comparing. A single absolute tolerance (set once under **Advanced Comparison Settings** and applied to every field selected as numeric) allows small rounding differences to be treated as equal. The default of `0.00` requires an exact match.
 
 ### Date: `date_only`
 Parses both ISO (`YYYY-MM-DD`) and US (`MM/DD/YYYY`) formats, then compares calendar date only. The time component is ignored; `2024-01-15 08:30` and `01/15/2024 23:59` are treated as equal.
@@ -150,7 +181,7 @@ If a column header is blank, it is renamed `Unnamed_1`, `Unnamed_2`, etc. If the
 ## Report Outputs
 
 ### Interactive Dashboard
-- **10 KPI cards:** totals, baseline-only, comparison-only, matched, records with differences, duplicates, missing identifiers
+- **10 KPI cards:** Source/Comparison record totals, Source Only, Comparison Only, Matched Records, Changed Records, Source/Comparison Duplicate Keys, Source/Comparison Missing Keys
 - **3 Plotly charts:** Reconciliation Summary bar chart, Match Coverage donut, Field-Level Differences frequency
 - **8 tabbed result tables:** each with a per-category CSV download
 
@@ -162,12 +193,12 @@ If a column header is blank, it is renamed `Unnamed_1`, `Unnamed_2`, etc. If the
 | Analysis Metadata | Dataset names, sheet tabs, record counts, match key fields, timestamp |
 | Comparison Rules | Per-field comparison type, tolerance value, and date precision setting |
 | Delta Counts | Flat count table suitable for pivot tables and downstream reporting |
-| Baseline Only Records | Records present in the Baseline Dataset but absent from the Comparison Dataset |
-| Comparison Only Records | Records present in the Comparison Dataset but absent from the Baseline Dataset |
-| Matched Records | Side-by-side view of all matched records (prefixed Baseline:/Comparison:) |
-| Records with Differences | Before/after values for every field-level difference |
-| Baseline Duplicate Identifiers | Rows sharing a match key with another row in the Baseline Dataset |
-| Comparison Duplicates | Rows sharing a match key with another row in the Comparison Dataset |
+| Source Only Records | Records present in the Source Dataset but absent from the Comparison Dataset |
+| Comparison Only Records | Records present in the Comparison Dataset but absent from the Source Dataset |
+| Matched Records | Side-by-side view of all matched records (columns prefixed `Source:` / `Comparison:`) |
+| Changed Records | Before/after values for every field-level difference |
+| Source Duplicate Keys | Rows sharing a match key with another row in the Source Dataset |
+| Comparison Duplicate Keys | Rows sharing a match key with another row in the Comparison Dataset |
 | Data Quality Flags | Rows excluded from reconciliation due to blank or null match key values |
 
 ---
@@ -182,7 +213,7 @@ Exercises every delta category in a small, purpose-built dataset.
 
 ```
 sample_data/file_a.csv  - 6 rows (1 matched-unchanged, 1 matched-changed,
-                           1 baseline-only, 1 duplicate key pair, 1 blank key)
+                           1 source-only, 1 duplicate key pair, 1 blank key)
 sample_data/file_b.csv  - 4 rows (corresponding comparison data)
 ```
 
@@ -194,11 +225,11 @@ Expected results:
 
 | Category | Count |
 |---|---|
-| Baseline Only Records | 1 (INV-003) |
+| Source Only Records | 1 (INV-003) |
 | Comparison Only Records | 1 (INV-005) |
 | Matched Records | 3 (INV-001, INV-002, INV-004) |
-| Records with Differences | 1 (INV-002, Status and Amount changed) |
-| Baseline Duplicate Identifiers | 2 (both INV-004 rows flagged) |
+| Changed Records | 1 (INV-002, Status and Amount changed) |
+| Source Duplicate Keys | 2 (both INV-004 rows flagged) |
 | Data Quality Flags | 1 (blank key row) |
 
 ### Invoice register dataset (`sample_a.csv` / `sample_b.csv`)
@@ -207,7 +238,7 @@ Two snapshots of a synthetic accounts-payable invoice register (all vendors, rev
 amounts are invented for demonstration).
 
 ```
-sample_data/sample_a.csv  - 11-row baseline (includes 1 duplicate, 1 blank key)
+sample_data/sample_a.csv  - 11-row source (includes 1 duplicate, 1 blank key)
 sample_data/sample_b.csv  - 10-row comparison (changed fields, new entries)
 ```
 
@@ -219,11 +250,11 @@ Expected results:
 
 | Category | Count |
 |---|---|
-| Baseline Only Records | 2 (INV-24007, INV-24008) |
+| Source Only Records | 2 (INV-24007, INV-24008) |
 | Comparison Only Records | 3 (INV-24010, INV-24011, INV-24012) |
 | Matched Records | 7 |
-| Records with Differences | 4 (INV-24002, INV-24004, INV-24005, INV-24009) |
-| Baseline Duplicate Identifiers | 2 (both INV-24008 rows flagged) |
+| Changed Records | 4 (INV-24002, INV-24004, INV-24005, INV-24009) |
+| Source Duplicate Keys | 2 (both INV-24008 rows flagged) |
 | Data Quality Flags | 1 (blank key row) |
 
 ---
@@ -234,7 +265,7 @@ Expected results:
 pytest tests/ -v
 ```
 
-Expected: **253 tests passing** across seven test modules.
+Expected: **253 tests passing** across eight test modules.
 
 With coverage:
 
@@ -267,10 +298,11 @@ DeltaAnalysis/
 │   ├── test_normalization.py       # 21 unit tests - key normalization
 │   ├── test_delta_engine.py        # 26 unit tests - comparison categories and validation
 │   ├── test_comparison.py          # 47 unit tests - numeric, date, and field-level comparison
-│   ├── test_io_utils.py            # 24 unit tests - file parsing, sheet selection, size checks
+│   ├── test_io_utils.py            # 20 unit tests - file parsing, sheet selection, size checks
 │   ├── test_prepare_dataframe.py   # 35 unit tests - raw read, prepare_dataframe, report metadata
 │   ├── test_data_preparation.py    # 41 unit tests - v1.2 data preparation workflow
-│   └── test_e2e_validation.py      # 59 integration tests - full workbook and scenario coverage
+│   ├── test_reporting.py           # 27 unit tests - summary and change-frequency tables, Excel export
+│   └── test_e2e_validation.py      # 36 integration tests - full workbook and scenario coverage
 └── sample_data/
     ├── file_a.csv                  # Minimal demo - one of each delta category
     ├── file_b.csv                  # Minimal demo - comparison side
@@ -290,7 +322,7 @@ DeltaAnalysis/
 
 **Blank keys are quarantined, not silently dropped.** Rows with null or empty key values are captured in the Data Quality Flags category so analysts see exactly what was excluded and why, a requirement for audit-traceable outputs.
 
-**Duplicates use first-occurrence for matching.** All duplicate rows are surfaced in the Duplicate Identifiers tabs; only the first occurrence participates in matching, keeping totals predictable.
+**Duplicates use first-occurrence for matching.** All duplicate rows are surfaced in the Source/Comparison Duplicate Keys tabs; only the first occurrence participates in matching, keeping totals predictable.
 
 ---
 
@@ -306,14 +338,14 @@ DeltaAnalysis/
 
 ## CI/CD
 
-A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test suite on every push and pull request. The build fails if any test fails. All seven test modules are included in the CI run.
+A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test suite on every push and pull request. The build fails if any test fails. All eight test modules are included in the CI run.
 
 ---
 
 ## Current Limitations
 
 - **Memory-bound processing.** Files larger than 500,000 rows may be slow or exhaust session memory. The application warns at 100,000 rows and requires explicit acknowledgment at 500,000 rows.
-- **No authentication.** The Streamlit application has no login gate. Do not deploy to a public URL with sensitive financial or personal data unless appropriate security controls are in place.
+- **No authentication.** The Streamlit application has no login gate. The [public demo](https://deltaanalysis.streamlit.app) is intended for synthetic or non-sensitive data only. For confidential financial, personal, or client data, run the app locally or on infrastructure your organization controls, with appropriate access controls. Do not upload such data to the public demo.
 - **No persistent configuration.** Match key selections and comparison field mappings must be re-entered each session.
 - **Single-run comparison only.** The tool performs one comparison per session; scheduled or batch comparisons are not currently supported.
 
@@ -323,7 +355,7 @@ A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full test sui
 
 | Symptom | Likely Cause | Resolution |
 |---|---|---|
-| `Columns not found in Baseline Dataset` | Selected column no longer matches after re-upload | Re-select match key columns after uploading a new file |
+| `Columns not found in Source Dataset` | Selected column no longer matches after re-upload | Re-select match key columns after uploading a new file |
 | `Key column counts must match` | Different number of key columns selected for each dataset | Select the same number of match key columns in both datasets |
 | `Could not parse Excel file` | File is password-protected, corrupted, or unsupported format | Open the file in Excel, save as `.xlsx`, and re-upload |
 | `The uploaded file contains no data rows` | File has a header row only | Confirm the file contains data rows below the header |
