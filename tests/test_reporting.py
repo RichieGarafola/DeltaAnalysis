@@ -243,3 +243,191 @@ class TestExcelSheetNames:
     def test_returns_bytes(self):
         raw = export_to_excel(_make_result())
         assert isinstance(raw, bytes) and len(raw) > 0
+
+
+# ---------------------------------------------------------------------------
+# build_change_frequency: regression tests for per-field counts
+#
+# result.changed only holds a value for the fields that actually differ in a
+# given record; fields that matched are absent (NaN once the DataFrame is
+# built). Unchanged cells must not be counted as differences.
+# ---------------------------------------------------------------------------
+
+from pathlib import Path
+
+SAMPLE_DIR = Path(__file__).resolve().parent.parent / "sample_data"
+
+
+def _freq_dict(result):
+    df = build_change_frequency(result)
+    return dict(zip(df["Field"], df["Changes"]))
+
+
+def _read_sample(name):
+    return pd.read_csv(SAMPLE_DIR / name, dtype=str, keep_default_na=False)
+
+
+def _engine_field_counts(df_a, df_b, key, cols, rules=None):
+    """Independent count: apply the engine's own comparison function to every
+    matched pair (first occurrence per key, non-blank keys) and tally the
+    fields it reports as unequal."""
+    from src.comparison import compare_field_values
+    from src.normalization import normalize_key_value
+
+    rules = rules or [
+        {"column_a": c, "column_b": c, "type": "text", "tolerance": None, "date_mode": None}
+        for c in cols
+    ]
+
+    def first_by_key(df):
+        out = {}
+        for _, row in df.iterrows():
+            k = normalize_key_value(row[key])
+            if k != "__BLANK__" and k not in out:
+                out[k] = row
+        return out
+
+    a, b = first_by_key(df_a), first_by_key(df_b)
+    counts = {}
+    for k in set(a) & set(b):
+        for rule in rules:
+            equal, *_ = compare_field_values(a[k][rule["column_a"]], b[k][rule["column_b"]], rule)
+            if not equal:
+                counts[rule["column_a"]] = counts.get(rule["column_a"], 0) + 1
+    return counts
+
+
+def _run(rows_a, rows_b, cols, rules=None):
+    df_a = pd.DataFrame(rows_a)
+    df_b = pd.DataFrame(rows_b)
+    return run_delta(df_a, df_b, ["id"], ["id"], cols, cols, comparison_rules=rules)
+
+
+class TestChangeFrequencyCounts:
+    def test_unchanged_cells_not_counted(self):
+        result = _run(
+            [{"id": "1", "status": "Open", "amount": "10", "owner": "A"},
+             {"id": "2", "status": "Open", "amount": "20", "owner": "B"}],
+            [{"id": "1", "status": "Closed", "amount": "10", "owner": "A"},
+             {"id": "2", "status": "Open", "amount": "25", "owner": "B"}],
+            ["status", "amount", "owner"],
+        )
+        assert len(result.changed) == 2
+        assert _freq_dict(result) == {"status": 1, "amount": 1}
+
+    def test_multiple_changed_fields_in_one_record_each_counted_once(self):
+        result = _run(
+            [{"id": "1", "status": "Open", "amount": "10", "owner": "A"}],
+            [{"id": "1", "status": "Closed", "amount": "11", "owner": "A"}],
+            ["status", "amount", "owner"],
+        )
+        assert _freq_dict(result) == {"status": 1, "amount": 1}
+
+    def test_blank_vs_value_counted_and_blank_vs_blank_not(self):
+        result = _run(
+            [{"id": "1", "status": "", "note": None},
+             {"id": "2", "status": "Open", "note": "x"}],
+            [{"id": "1", "status": "Open", "note": float("nan")},
+             {"id": "2", "status": "Open", "note": "x"}],
+            ["status", "note"],
+        )
+        # id 1: status blank -> Open is a change; note None vs NaN are both blank.
+        assert _freq_dict(result) == {"status": 1}
+
+    def test_pandas_nullable_values_treated_as_blank(self):
+        df_a = pd.DataFrame({"id": ["1", "2"], "status": pd.array(["Open", pd.NA], dtype="string")})
+        df_b = pd.DataFrame({"id": ["1", "2"], "status": pd.array(["Closed", "null"], dtype="string")})
+        result = run_delta(df_a, df_b, ["id"], ["id"], ["status"], ["status"])
+        assert _freq_dict(result) == {"status": 1}
+
+    def test_numeric_within_tolerance_not_counted(self):
+        rules = [
+            {"column_a": "amount", "column_b": "amount", "type": "numeric", "tolerance": 0.01, "date_mode": None},
+            {"column_a": "status", "column_b": "status", "type": "text", "tolerance": None, "date_mode": None},
+        ]
+        result = _run(
+            [{"id": "1", "amount": "$1,000.00", "status": "Open"},
+             {"id": "2", "amount": "500", "status": "Open"}],
+            [{"id": "1", "amount": "1000.005", "status": "Closed"},
+             {"id": "2", "amount": "500.50", "status": "Open"}],
+            ["amount", "status"], rules,
+        )
+        # id 1: amount within tolerance, status changed; id 2: amount beyond tolerance.
+        assert _freq_dict(result) == {"status": 1, "amount": 1}
+
+    def test_date_aware_comparison(self):
+        rules = [
+            {"column_a": "due", "column_b": "due", "type": "date", "tolerance": None, "date_mode": "date_only"},
+            {"column_a": "status", "column_b": "status", "type": "text", "tolerance": None, "date_mode": None},
+        ]
+        result = _run(
+            [{"id": "1", "due": "2024-01-15", "status": "Open"},
+             {"id": "2", "due": "2024-01-15 08:30", "status": "Open"},
+             {"id": "3", "due": "2024-01-15", "status": "Open"}],
+            [{"id": "1", "due": "01/15/2024", "status": "Closed"},
+             {"id": "2", "due": "2024-01-15 23:59", "status": "Closed"},
+             {"id": "3", "due": "2024-01-16", "status": "Open"}],
+            ["due", "status"], rules,
+        )
+        # Same calendar date in another format / time is not a difference.
+        assert _freq_dict(result) == {"status": 2, "due": 1}
+
+    def test_engine_populates_changed_fields_with_non_null_strings(self):
+        # build_change_frequency relies on this: a field the engine judged
+        # different always has string before/after values, even when blank.
+        rules = [
+            {"column_a": "amount", "column_b": "amount", "type": "numeric", "tolerance": 0.0, "date_mode": None},
+            {"column_a": "due", "column_b": "due", "type": "date", "tolerance": None, "date_mode": "date_only"},
+            {"column_a": "status", "column_b": "status", "type": "text", "tolerance": None, "date_mode": None},
+        ]
+        result = _run(
+            [{"id": "1", "amount": "", "due": "2024-01-01", "status": None},
+             {"id": "2", "amount": "5", "due": "", "status": "Open"}],
+            [{"id": "1", "amount": "7", "due": "2024-01-01", "status": "Open"},
+             {"id": "2", "amount": "abc", "due": "2024-02-01", "status": "Open"}],
+            ["amount", "due", "status"], rules,
+        )
+        for col in ("amount", "due", "status"):
+            for side in ("Source", "Comparison"):
+                name = f"{col} - {side}"
+                if name in result.changed.columns:
+                    populated = result.changed[name].dropna()
+                    assert all(isinstance(v, str) for v in populated)
+        assert _freq_dict(result) == {"amount": 2, "due": 1, "status": 1}
+
+    def test_each_count_bounded_by_changed_records(self):
+        result = _run(
+            [{"id": str(i), "a": "x", "b": "y"} for i in range(5)],
+            [{"id": str(i), "a": "x" if i % 2 else "z", "b": "y"} for i in range(5)],
+            ["a", "b"],
+        )
+        freq = _freq_dict(result)
+        assert freq == {"a": 3}
+        assert all(v <= len(result.changed) for v in freq.values())
+
+
+class TestChangeFrequencyBundledSamples:
+    def test_invoice_register_sample(self):
+        df_a, df_b = _read_sample("sample_a.csv"), _read_sample("sample_b.csv")
+        cols = ["InvoiceAmount", "Status", "Reviewer"]
+        result = run_delta(df_a, df_b, ["InvoiceID"], ["InvoiceID"], cols, cols)
+
+        # Record-level results are unchanged by the fix.
+        assert (len(result.only_in_a), len(result.only_in_b), len(result.matched),
+                len(result.changed), len(result.duplicates_a), len(result.blank_keys_a)) == (2, 3, 7, 4, 2, 1)
+
+        expected = {"Status": 4, "InvoiceAmount": 1, "Reviewer": 1}
+        assert _engine_field_counts(df_a, df_b, "InvoiceID", cols) == expected
+        assert _freq_dict(result) == expected
+
+    def test_minimal_demo_sample(self):
+        df_a, df_b = _read_sample("file_a.csv"), _read_sample("file_b.csv")
+        cols = ["Status", "Amount"]
+        result = run_delta(df_a, df_b, ["InvoiceID"], ["InvoiceID"], cols, cols)
+
+        assert (len(result.only_in_a), len(result.only_in_b), len(result.matched),
+                len(result.changed), len(result.duplicates_a), len(result.blank_keys_a)) == (1, 1, 3, 1, 2, 1)
+
+        expected = {"Status": 1, "Amount": 1}
+        assert _engine_field_counts(df_a, df_b, "InvoiceID", cols) == expected
+        assert _freq_dict(result) == expected

@@ -65,7 +65,7 @@ Typical scenarios:
 | Large-file safeguards | Warning banner at 100,000 rows; confirmation gate at 500,000 rows; table previews capped at 1,000 rows |
 | Executive Summary | Auto-generated plain-English briefing narrative (every number is derived from the actual results) |
 | 11-tab Excel workbook | Audit-ready export with metadata, comparison rules, delta counts, and per-category data tabs |
-| 253-test suite | Covers normalization, comparison logic, I/O utilities, data preparation, reporting, and end-to-end scenarios |
+| 263-test suite | Covers normalization, comparison logic, I/O utilities, data preparation, reporting, and end-to-end scenarios |
 
 ---
 
@@ -265,7 +265,7 @@ Expected results:
 pytest tests/ -v
 ```
 
-Expected: **253 tests passing** across eight test modules.
+Expected: **263 tests passing** across eight test modules.
 
 With coverage:
 
@@ -301,7 +301,7 @@ DeltaAnalysis/
 │   ├── test_io_utils.py            # 20 unit tests - file parsing, sheet selection, size checks
 │   ├── test_prepare_dataframe.py   # 35 unit tests - raw read, prepare_dataframe, report metadata
 │   ├── test_data_preparation.py    # 41 unit tests - v1.2 data preparation workflow
-│   ├── test_reporting.py           # 27 unit tests - summary and change-frequency tables, Excel export
+│   ├── test_reporting.py           # 37 unit tests - summary and change-frequency tables, Excel export
 │   └── test_e2e_validation.py      # 36 integration tests - full workbook and scenario coverage
 └── sample_data/
     ├── file_a.csv                  # Minimal demo - one of each delta category
